@@ -1,15 +1,14 @@
 const express = require('express');
 const cors = require('cors');
-const { addonBuilder, getRouter } = require('stremio-addon-express');
+const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
 
 // --- ADDON DEFINITIE ---
-// (Dit gedeelte blijft grotendeels hetzelfde, maar let op de nieuwe addonBuilder import)
 
 const manifest = {
-    id: "org.iptvexample.express",
-    version: "2.0.0", // Hoofdversie verhoogd voor de nieuwe aanpak
-    name: "IPTV Voorbeeld (Express)",
-    description: "Een stabiele addon die IPTV zenders toont, draaiend op Express via Vercel.",
+    id: "org.iptvexample.correctsdk",
+    version: "3.0.0", // Hoofdversie verhoogd
+    name: "IPTV Voorbeeld (Correcte SDK)",
+    description: "Een stabiele addon die draait op Express via Vercel.",
     logo: "https://www.stremio.com/website/stremio-logo-small.png",
     resources: ["catalog", "stream"],
     types: ["tv"],
@@ -73,20 +72,23 @@ builder.defineStreamHandler(args => {
     return Promise.resolve({ streams: [] });
 });
 
-// --- EXPRESS SERVER SETUP ---
-// Dit is de nieuwe, robuuste manier
 
-// 1. Maak een Express app aan
+// --- EXPRESS SERVER SETUP (DE CORRECTE MANIER) ---
+
+// 1. Maak de Stremio handler aan met serveHTTP
+const addonInterface = builder.getInterface();
+const handler = serveHTTP(addonInterface);
+
+// 2. Maak een Express app aan
 const app = express();
-
-// 2. Vraag de addon router op van de library
-const addonRouter = getRouter(builder.getInterface());
-
-// 3. Schakel CORS in (belangrijk voor web-gebaseerde Stremio clients)
 app.use(cors());
 
-// 4. Voeg de addon router toe aan de Express app
-app.use(addonRouter);
+// 3. Gebruik de Stremio handler als middleware voor de Express app.
+// Express beheert de request/response cyclus, en geeft deze door aan de Stremio handler.
+// Dit is de brug die alle vorige problemen oplost.
+app.use((req, res) => {
+    handler(req, res);
+});
 
-// 5. Exporteer de volledige Express app. Vercel weet precies hoe dit te hosten.
+// 4. Exporteer de Express app. Vercel zal dit correct hosten.
 module.exports = app;
