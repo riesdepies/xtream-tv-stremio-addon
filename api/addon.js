@@ -1,9 +1,9 @@
 const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
 
 const manifest = {
-    id: "org.iptvexample.vercel.final",
-    version: "1.0.2",
-    name: "IPTV Voorbeeld (Vercel)",
+    id: "org.iptvexample.vercel.correct",
+    version: "1.1.0", // Versie verhoogd
+    name: "IPTV Voorbeeld (Vercel Corrected)",
     description: "Een simpele addon die IPTV zenders toont, gehost op Vercel.",
     logo: "https://www.stremio.com/website/stremio-logo-small.png",
     resources: ["catalog", "stream"],
@@ -41,6 +41,7 @@ const iptvChannels = [
 const builder = new addonBuilder(manifest);
 
 builder.defineCatalogHandler(args => {
+    console.log("Catalog request:", args);
     if (args.type === 'tv' && args.id === 'iptv-zenders') {
         const metas = iptvChannels.map(channel => ({
             id: channel.id,
@@ -55,6 +56,7 @@ builder.defineCatalogHandler(args => {
 });
 
 builder.defineStreamHandler(args => {
+    console.log("Stream request:", args);
     if (args.type === 'tv') {
         const channel = iptvChannels.find(c => c.id === args.id);
         if (channel) {
@@ -68,5 +70,16 @@ builder.defineStreamHandler(args => {
     return Promise.resolve({ streams: [] });
 });
 
-// Exporteer de handler direct. Dit is de enige correcte manier voor de SDK op Vercel.
-module.exports = serveHTTP(builder.getInterface());
+
+// Creëer de Stremio handler-functie.
+// Dit wordt eenmalig gedaan wanneer de serverless functie voor het eerst wordt opgestart.
+const handler = serveHTTP(builder.getInterface());
+
+// Exporteer een Vercel-compatibele serverless functie.
+// Deze neemt de standaard (request, response) argumenten.
+// 'async' is hier toegevoegd als best practice voor serverless functies.
+module.exports = async (req, res) => {
+    // Roep de Stremio handler aan voor elke inkomende request.
+    // Dit overbrugt de kloof tussen de Vercel-omgeving en de Stremio SDK.
+    await handler(req, res);
+};
