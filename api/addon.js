@@ -1,11 +1,11 @@
-const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
+const { addonBuilder } = require('stremio-addon-sdk');
 
 // We verhogen de versie, zodat we zeker weten dat de nieuwe code is gedeployed.
 const manifest = {
-    id: "org.iptvexample.final.debug",
-    version: "4.1.0",
-    name: "IPTV Voorbeeld (Debug)",
-    description: "Een simpele en werkende addon, gehost op Vercel.",
+    id: "org.iptvexample.serverless.final",
+    version: "5.0.0",
+    name: "IPTV Voorbeeld (Serverless)",
+    description: "Een addon die correct is gebouwd voor de Vercel serverless omgeving.",
     logo: "https://www.stremio.com/website/stremio-logo-small.png",
     resources: ["catalog", "stream"],
     types: ["tv"],
@@ -41,56 +41,51 @@ const iptvChannels = [
 
 const builder = new addonBuilder(manifest);
 
-// --- ROBUUSTE CATALOG HANDLER ---
 builder.defineCatalogHandler(args => {
-    // Log dat de functie wordt aangeroepen. Dit zouden we in Vercel moeten zien.
-    console.log("Catalog handler aangeroepen met args:", JSON.stringify(args));
-
-    try {
-        if (args.type === 'tv' && args.id === 'iptv-zenders') {
-            const metas = iptvChannels.map(channel => ({
-                id: channel.id,
-                type: 'tv',
-                name: channel.name,
-                poster: channel.logo,
-                posterShape: 'landscape'
-            }));
-            
-            console.log("Catalogus succesvol gebouwd, " + metas.length + " items gevonden.");
-            return Promise.resolve({ metas: metas });
-        }
-        
-        // Als de request niet overeenkomt, geef een lege catalogus terug.
-        console.log("Request niet herkend, lege catalogus wordt teruggestuurd.");
-        return Promise.resolve({ metas: [] });
-
-    } catch (error) {
-        // Vang eventuele onverwachte fouten op.
-        console.error("!!! KRITISCHE FOUT in Catalog Handler:", error);
-        // Stuur een fout terug zodat de functie niet bevriest.
-        return Promise.reject(error);
+    if (args.type === 'tv' && args.id === 'iptv-zenders') {
+        const metas = iptvChannels.map(channel => ({
+            id: channel.id,
+            type: 'tv',
+            name: channel.name,
+            poster: channel.logo,
+            posterShape: 'landscape'
+        }));
+        return Promise.resolve({ metas: metas });
     }
+    return Promise.resolve({ metas: [] });
 });
 
-// --- ROBUUSTE STREAM HANDLER ---
 builder.defineStreamHandler(args => {
-    console.log("Stream handler aangeroepen met args:", JSON.stringify(args));
-    try {
+    if (args.type === 'tv') {
         const channel = iptvChannels.find(c => c.id === args.id);
         if (channel) {
             const stream = { url: channel.streamUrl, title: "Live" };
-            console.log("Stream gevonden voor ID:", args.id);
             return Promise.resolve({ streams: [stream] });
         }
-        
-        console.log("Geen stream gevonden voor ID:", args.id);
-        return Promise.resolve({ streams: [] });
-
-    } catch (error) {
-        console.error("!!! KRITISCHE FOUT in Stream Handler:", error);
-        return Promise.reject(error);
     }
+    return Promise.resolve({ streams: [] });
 });
 
-// Exporteer de handler direct.
-module.exports = serveHTTP(builder.getInterface());
+// Bouw de addon-interface EENMALIG.
+const addonInterface = builder.getInterface();
+
+// --- DE CORRECTE SERVERLESS HANDLER ---
+// We exporteren een standaard Vercel-functie (req, res).
+module.exports = async (req, res) => {
+    try {
+        // De addon-interface kan een request verwerken en geeft een response-object terug.
+        const response = await addonInterface.get(req.query);
+
+        // Voeg de CORS-header toe, dit is belangrijk.
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Headers', '*');
+        res.setHeader('Content-Type', 'application/json');
+
+        // Stuur de response terug.
+        res.status(200).send(response);
+    } catch (err) {
+        // Vang eventuele fouten af.
+        console.error(err);
+        res.status(500).send({ err: 'Internal Server Error' });
+    }
+};
