@@ -1,10 +1,12 @@
-const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
+const express = require('express');
+const cors = require('cors');
+const { addonBuilder } = require('stremio-addon-sdk');
 
 const manifest = {
     id: "org.iptvexample.express.final.correct",
-    version: "8.2.0", // Versie weer verhoogd voor duidelijke update
-    name: "IPTV Voorbeeld (Stabiele Versie)", // Naam bijgewerkt
-    description: "Een stabiele addon die draait op Vercel.",
+    version: "9.0.0", // Versie verhoogd om update te forceren
+    name: "IPTV Voorbeeld (Definitieve Werkende Versie)", // Naam gewijzigd
+    description: "Een stabiele addon die draait op Express via Vercel.",
     logo: "https://www.stremio.com/website/stremio-logo-small.png",
     resources: ["catalog", "stream"],
     types: ["tv"],
@@ -45,9 +47,28 @@ builder.defineStreamHandler(args => {
 });
 
 const addonInterface = builder.getInterface();
+const app = express();
+app.use(cors());
 
-// Exporteer een Vercel serverless functie die de SDK's HTTP server gebruikt.
-// Dit is de meest robuuste methode.
-module.exports = (req, res) => {
-    serveHTTP(addonInterface, { req, res });
-};
+// Route voor het manifest: lost het installatieprobleem op.
+app.get('/manifest.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(manifest);
+});
+
+// Route voor data (catalogus/streams): lost het "Empty Catalog" probleem op.
+app.get('/:resource/:type/:id.json', async (req, res) => {
+    try {
+        const { resource, type, id } = req.params;
+        // DE FIX: Bouw het 'args' object alléén met de parameters uit het pad.
+        const args = { resource, type, id };
+        const response = await addonInterface.get(args);
+        res.setHeader('Content-Type', 'application/json');
+        res.send(response);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send({ error: 'Handler Error', message: err.message });
+    }
+});
+
+module.exports = app;
