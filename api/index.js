@@ -1,5 +1,5 @@
 const { addonBuilder, getRouter } = require('stremio-addon-sdk');
-const https = require('httpss');
+const https = require('https');
 const http = require('http');
 const { URL } = require('url');
 
@@ -27,7 +27,7 @@ function fetchJson(requestUrl) {
     });
 }
 
-// Proxy-functie voor de configuratiepagina
+// Proxy-functie voor de configuratiepagina (ongewijzigd)
 async function proxyRequest(req, res, targetUrl) {
     try {
         const data = await fetchJson(targetUrl);
@@ -39,55 +39,52 @@ async function proxyRequest(req, res, targetUrl) {
     }
 }
 
-// --- START VAN GEWIJZIGDE LOGICA ---
-
 // Functie die de addon interface bouwt op basis van de configuratie
 function buildAddon(config) {
+    // --- WIJZIGING: Manifest aangepast voor categorieën ---
+    // We tonen nu een catalogus van het type 'channel'
     const manifest = {
-        id: `org.xtreamcodes.from.config.structured.${Buffer.from(JSON.stringify(config)).toString('hex').substring(0, 10)}`,
-        version: "1.1.0",
+        id: `org.xtreamcodes.categories.from.config.${Buffer.from(JSON.stringify(config)).toString('hex').substring(0, 10)}`,
+        version: "1.0.0",
         name: "Mijn Xtream TV (Categorieën)",
-        description: "IPTV addon die kanalen per categorie groepeert.",
-        logo: "https://i.imgur.com/kESd5L6.png", // Een meer generiek TV-icoon
+        description: "IPTV kanalen, georganiseerd per categorie, van uw Xtream Codes provider.",
+        logo: "https://www.stremio.com/website/stremio-logo-small.png",
         resources: ["catalog", "stream"],
-        types: ["tv"],
+        types: ["channel"], // We bieden 'channel' aan als type
         catalogs: [{
-            type: "tv",
-            id: "xtream-tv-categories",
-            name: "Mijn TV Categorieën"
+            type: "channel", // De catalogus zelf is van het type 'channel'
+            id: "xtream-categories",
+            name: "TV Categorieën"
         }]
     };
 
     const builder = new addonBuilder(manifest);
 
-    // WIJZIGING 1: De catalogus toont nu CATEGORIEËN in plaats van kanalen.
+    // --- WIJZIGING: Catalog handler levert nu categorieën i.p.v. kanalen ---
     builder.defineCatalogHandler(async ({ type, id }) => {
-        if (type === 'tv' && id === 'xtream-tv-categories') {
+        if (type === 'channel' && id === 'xtream-categories') {
             let allCategoryMetas = [];
             const activeServers = config.servers.filter(s => s.active);
 
             for (const [serverIndex, server] of activeServers.entries()) {
                 try {
                     const apiUrl = `${server.url}/player_api.php?username=${server.username}&password=${server.password}&action=get_live_categories`;
-                    const categories = await fetchJson(apiUrl);
+                    let categories = await fetchJson(apiUrl);
                     
                     if (!Array.isArray(categories)) continue;
 
-                    let categoriesToShow = categories;
-                    // Respecteer de filterinstellingen van de configuratiepagina
+                    // Filter de categorieën op basis van de selectie op de configuratiepagina
                     if (Array.isArray(server.categories) && server.categories.length > 0) {
-                        const selectedCategoryIds = new Set(server.categories);
-                        categoriesToShow = categories.filter(cat => selectedCategoryIds.has(cat.category_id));
+                        const userSelectedCategoryIds = new Set(server.categories);
+                        categories = categories.filter(cat => userSelectedCategoryIds.has(cat.category_id));
                     }
-                    
-                    const metas = categoriesToShow.map(cat => ({
-                        // De ID bevat nu de serverindex en de categorie-ID.
-                        // Dit is essentieel voor de stream handler.
-                        id: `${serverIndex}:${cat.category_id}`,
-                        type: 'tv',
-                        name: `${server.name} - ${cat.category_name}`,
-                        poster: 'https://i.imgur.com/kESd5L6.png', // Generieke poster voor categorieën
-                        posterShape: 'landscape'
+
+                    const metas = categories.map(category => ({
+                        id: `${serverIndex}:${category.category_id}`, // ID bevat server index en categorie ID
+                        type: 'channel',
+                        name: `${category.category_name} (${server.name})`, // Voeg servernaam toe voor duidelijkheid bij meerdere accounts
+                        poster: manifest.logo, // Gebruik een generieke poster
+                        posterShape: 'square'
                     }));
                     allCategoryMetas = allCategoryMetas.concat(metas);
                 } catch (e) {
@@ -99,10 +96,9 @@ function buildAddon(config) {
         return { metas: [] };
     });
 
-    // WIJZIGING 2: De stream handler vindt nu KANALEN BINNEN EEN AANGEKLIKTE CATEGORIE.
+    // --- WIJZIGING: Stream handler levert nu de kanalen BINNEN een gekozen categorie ---
     builder.defineStreamHandler(async ({ type, id }) => {
-        if (type === 'tv') {
-            // Ontleed de ID om de server en categorie te vinden
+        if (type === 'channel') {
             const [serverIndexStr, categoryId] = id.split(':');
             const serverIndex = parseInt(serverIndexStr, 10);
             
@@ -111,23 +107,24 @@ function buildAddon(config) {
             if (!isNaN(serverIndex) && activeServers[serverIndex]) {
                 const server = activeServers[serverIndex];
                 try {
-                    // 1. Haal ALLE live streams voor deze server op
-                    const apiUrl = `${server.url}/player_api.php?username=${server.username}&password=${server.password}&action=get_live_streams`;
-                    const allChannels = await fetchJson(apiUrl);
+                    // Stap 1: Haal ALLE live streams op van de server
+                    const streamsApiUrl = `${server.url}/player_api.php?username=${server.username}&password=${server.password}&action=get_live_streams`;
+                    const allStreams = await fetchJson(streamsApiUrl);
 
-                    if (!Array.isArray(allChannels)) return { streams: [] };
-                    
-                    // 2. Filter de kanalen die tot de geselecteerde categorie behoren
-                    const channelsInCategory = allChannels.filter(channel => channel.category_id == categoryId);
+                    if (!Array.isArray(allStreams)) return { streams: [] };
 
-                    // 3. Maak een stream voor elk kanaal in de categorie
+                    // Stap 2: Filter de streams die tot de gevraagde categorie behoren
+                    const channelsInCategory = allStreams.filter(stream => stream.category_id == categoryId);
+
+                    // Stap 3: Maak een Stremio stream object voor elk kanaal in de categorie
                     const streams = channelsInCategory.map(channel => ({
                         url: `${server.url}/live/${server.username}/${server.password}/${channel.stream_id}.ts`,
-                        // De titel van de stream is nu de naam van het kanaal
-                        title: channel.name
+                        title: channel.name, // De naam van het kanaal wordt getoond in de streamselectielijst
+                        name: channel.name // Alternatief voor sommige clients
                     }));
-
+                    
                     return { streams: streams };
+
                 } catch (e) {
                     console.error(`Fout bij ophalen van streams voor categorie ${categoryId}:`, e);
                 }
@@ -139,10 +136,8 @@ function buildAddon(config) {
     return builder.getInterface();
 }
 
-// --- EINDE VAN GEWIJZIGDE LOGICA ---
 
-
-// Hoofd serverless functie die als router fungeert (deze blijft ongewijzigd)
+// Hoofd serverless functie die als router fungeert (grotendeels ongewijzigd)
 module.exports = async (req, res) => {
     // CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
