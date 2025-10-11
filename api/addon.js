@@ -1,10 +1,15 @@
-const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
+const express = require('express');
+const cors = require('cors');
+const { addonBuilder, getRouter } = require('stremio-addon-express');
+
+// --- ADDON DEFINITIE ---
+// (Dit gedeelte blijft grotendeels hetzelfde, maar let op de nieuwe addonBuilder import)
 
 const manifest = {
-    id: "org.iptvexample.vercel.correct",
-    version: "1.1.0", // Versie verhoogd
-    name: "IPTV Voorbeeld (Vercel Corrected)",
-    description: "Een simpele addon die IPTV zenders toont, gehost op Vercel.",
+    id: "org.iptvexample.express",
+    version: "2.0.0", // Hoofdversie verhoogd voor de nieuwe aanpak
+    name: "IPTV Voorbeeld (Express)",
+    description: "Een stabiele addon die IPTV zenders toont, draaiend op Express via Vercel.",
     logo: "https://www.stremio.com/website/stremio-logo-small.png",
     resources: ["catalog", "stream"],
     types: ["tv"],
@@ -41,7 +46,6 @@ const iptvChannels = [
 const builder = new addonBuilder(manifest);
 
 builder.defineCatalogHandler(args => {
-    console.log("Catalog request:", args);
     if (args.type === 'tv' && args.id === 'iptv-zenders') {
         const metas = iptvChannels.map(channel => ({
             id: channel.id,
@@ -56,7 +60,6 @@ builder.defineCatalogHandler(args => {
 });
 
 builder.defineStreamHandler(args => {
-    console.log("Stream request:", args);
     if (args.type === 'tv') {
         const channel = iptvChannels.find(c => c.id === args.id);
         if (channel) {
@@ -70,16 +73,20 @@ builder.defineStreamHandler(args => {
     return Promise.resolve({ streams: [] });
 });
 
+// --- EXPRESS SERVER SETUP ---
+// Dit is de nieuwe, robuuste manier
 
-// Creëer de Stremio handler-functie.
-// Dit wordt eenmalig gedaan wanneer de serverless functie voor het eerst wordt opgestart.
-const handler = serveHTTP(builder.getInterface());
+// 1. Maak een Express app aan
+const app = express();
 
-// Exporteer een Vercel-compatibele serverless functie.
-// Deze neemt de standaard (request, response) argumenten.
-// 'async' is hier toegevoegd als best practice voor serverless functies.
-module.exports = async (req, res) => {
-    // Roep de Stremio handler aan voor elke inkomende request.
-    // Dit overbrugt de kloof tussen de Vercel-omgeving en de Stremio SDK.
-    await handler(req, res);
-};
+// 2. Vraag de addon router op van de library
+const addonRouter = getRouter(builder.getInterface());
+
+// 3. Schakel CORS in (belangrijk voor web-gebaseerde Stremio clients)
+app.use(cors());
+
+// 4. Voeg de addon router toe aan de Express app
+app.use(addonRouter);
+
+// 5. Exporteer de volledige Express app. Vercel weet precies hoe dit te hosten.
+module.exports = app;
