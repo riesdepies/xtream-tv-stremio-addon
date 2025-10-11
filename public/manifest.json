@@ -1,21 +1,16 @@
 {
-    "id": "org.iptvexample.static",
-    "version": "5.0.0",
-    "name": "IPTV Voorbeeld (Statisch Manifest)",
-    "description": "Een razendsnelle en stabiele addon met een statisch manifest.",
-    "logo": "https://www.stremio.com/website/stremio-logo-small.png",
-    "resources": [
-        "catalog",
-        "stream"
-    ],
-    "types": [
-        "tv"
-    ],
-    "catalogs": [
-        {
-            "type": "tv",
-            "id": "iptv-zenders",
-            "name": "Mijn TV Zenders"
-        }
-    ]
+  "id": "org.iptvexample.final",
+  "version": "4.0.0",
+  "name": "IPTV Voorbeeld (Final)",
+  "description": "Een simpele en werkende addon, gehost op Vercel.",
+  "logo": "https://www.stremio.com/website/stremio-logo-small.png",
+  "resources": ["catalog", "stream"],
+  "types": ["tv"],
+  "catalogs": [
+    {
+      "type": "tv",
+      "id": "iptv-zenders",
+      "name": "Mijn TV Zenders"
+    }
+  ]
 }
