@@ -1,9 +1,10 @@
 const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
 
+// We verhogen de versie, zodat we zeker weten dat de nieuwe code is gedeployed.
 const manifest = {
-    id: "org.iptvexample.final",
-    version: "4.0.0",
-    name: "IPTV Voorbeeld (Final)",
+    id: "org.iptvexample.final.debug",
+    version: "4.1.0",
+    name: "IPTV Voorbeeld (Debug)",
     description: "Een simpele en werkende addon, gehost op Vercel.",
     logo: "https://www.stremio.com/website/stremio-logo-small.png",
     resources: ["catalog", "stream"],
@@ -40,30 +41,56 @@ const iptvChannels = [
 
 const builder = new addonBuilder(manifest);
 
+// --- ROBUUSTE CATALOG HANDLER ---
 builder.defineCatalogHandler(args => {
-    if (args.type === 'tv' && args.id === 'iptv-zenders') {
-        const metas = iptvChannels.map(channel => ({
-            id: channel.id,
-            type: 'tv',
-            name: channel.name,
-            poster: channel.logo,
-            posterShape: 'landscape'
-        }));
-        return Promise.resolve({ metas: metas });
+    // Log dat de functie wordt aangeroepen. Dit zouden we in Vercel moeten zien.
+    console.log("Catalog handler aangeroepen met args:", JSON.stringify(args));
+
+    try {
+        if (args.type === 'tv' && args.id === 'iptv-zenders') {
+            const metas = iptvChannels.map(channel => ({
+                id: channel.id,
+                type: 'tv',
+                name: channel.name,
+                poster: channel.logo,
+                posterShape: 'landscape'
+            }));
+            
+            console.log("Catalogus succesvol gebouwd, " + metas.length + " items gevonden.");
+            return Promise.resolve({ metas: metas });
+        }
+        
+        // Als de request niet overeenkomt, geef een lege catalogus terug.
+        console.log("Request niet herkend, lege catalogus wordt teruggestuurd.");
+        return Promise.resolve({ metas: [] });
+
+    } catch (error) {
+        // Vang eventuele onverwachte fouten op.
+        console.error("!!! KRITISCHE FOUT in Catalog Handler:", error);
+        // Stuur een fout terug zodat de functie niet bevriest.
+        return Promise.reject(error);
     }
-    return Promise.resolve({ metas: [] });
 });
 
+// --- ROBUUSTE STREAM HANDLER ---
 builder.defineStreamHandler(args => {
-    if (args.type === 'tv') {
+    console.log("Stream handler aangeroepen met args:", JSON.stringify(args));
+    try {
         const channel = iptvChannels.find(c => c.id === args.id);
         if (channel) {
             const stream = { url: channel.streamUrl, title: "Live" };
+            console.log("Stream gevonden voor ID:", args.id);
             return Promise.resolve({ streams: [stream] });
         }
+        
+        console.log("Geen stream gevonden voor ID:", args.id);
+        return Promise.resolve({ streams: [] });
+
+    } catch (error) {
+        console.error("!!! KRITISCHE FOUT in Stream Handler:", error);
+        return Promise.reject(error);
     }
-    return Promise.resolve({ streams: [] });
 });
 
-// Exporteer de handler direct. Dit is de enige correcte manier voor Vercel.
+// Exporteer de handler direct.
 module.exports = serveHTTP(builder.getInterface());
