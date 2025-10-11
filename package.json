@@ -1,6 +1,6 @@
 {
   "name": "stremio-iptv-addon-final-working",
-  "version": "7.0.0",
+  "version": "8.0.0",
   "description": "Een Stremio IPTV addon met Express voor een stabiele Vercel deployment.",
   "main": "api/addon.js",
   "dependencies": {
