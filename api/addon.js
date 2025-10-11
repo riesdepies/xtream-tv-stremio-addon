@@ -4,8 +4,8 @@ const { addonBuilder } = require('stremio-addon-sdk');
 
 const manifest = {
     id: "org.iptvexample.express.final.correct",
-    version: "8.0.0",
-    name: "IPTV Voorbeeld (Express - Definitief)",
+    version: "8.1.0", // ZICHTBARE WIJZIGING
+    name: "IPTV Voorbeeld (Definitieve Test)", // ZICHTBARE WIJZIGING
     description: "Een stabiele addon die draait op Express via Vercel.",
     logo: "https://www.stremio.com/website/stremio-logo-small.png",
     resources: ["catalog", "stream"],
@@ -56,19 +56,25 @@ app.get('/manifest.json', (req, res) => {
 });
 
 app.get('/:resource/:type/:id.json', async (req, res) => {
+    console.log("--- Binnenkomend verzoek voor data ---");
+    console.log("Request Params (uit URL):", req.params);
+    console.log("Request Query (na ?):", req.query);
+    
     try {
         const { resource, type, id } = req.params;
         
-        // **DE CRUCIALE FIX:** Bouw het 'args' object alléén met de parameters uit het pad.
-        // De 'extra' property wordt hier bewust weggelaten.
+        // De correcte manier om args te bouwen.
         const args = { resource, type, id };
+        
+        console.log("Definitief 'args' object doorgegeven aan SDK:", args);
 
         const response = await addonInterface.get(args);
         
+        console.log("Succesvol antwoord van SDK ontvangen.");
         res.setHeader('Content-Type', 'application/json');
         res.send(response);
     } catch (err) {
-        // Stuur een meer informatieve foutmelding terug
+        console.error("FOUT GEVANGEN:", err);
         res.status(500).send({ error: 'Handler Error', message: err.message });
     }
 });
