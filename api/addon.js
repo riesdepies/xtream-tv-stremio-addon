@@ -1,12 +1,10 @@
-const express = require('express');
-const cors = require('cors');
-const { addonBuilder } = require('stremio-addon-sdk');
+const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
 
 const manifest = {
     id: "org.iptvexample.express.final.correct",
-    version: "8.1.0", // ZICHTBARE WIJZIGING
-    name: "IPTV Voorbeeld (Definitieve Test)", // ZICHTBARE WIJZIGING
-    description: "Een stabiele addon die draait op Express via Vercel.",
+    version: "8.2.0", // Versie weer verhoogd voor duidelijke update
+    name: "IPTV Voorbeeld (Stabiele Versie)", // Naam bijgewerkt
+    description: "Een stabiele addon die draait op Vercel.",
     logo: "https://www.stremio.com/website/stremio-logo-small.png",
     resources: ["catalog", "stream"],
     types: ["tv"],
@@ -47,36 +45,9 @@ builder.defineStreamHandler(args => {
 });
 
 const addonInterface = builder.getInterface();
-const app = express();
-app.use(cors());
 
-app.get('/manifest.json', (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    res.send(manifest);
-});
-
-app.get('/:resource/:type/:id.json', async (req, res) => {
-    console.log("--- Binnenkomend verzoek voor data ---");
-    console.log("Request Params (uit URL):", req.params);
-    console.log("Request Query (na ?):", req.query);
-    
-    try {
-        const { resource, type, id } = req.params;
-        
-        // De correcte manier om args te bouwen.
-        const args = { resource, type, id };
-        
-        console.log("Definitief 'args' object doorgegeven aan SDK:", args);
-
-        const response = await addonInterface.get(args);
-        
-        console.log("Succesvol antwoord van SDK ontvangen.");
-        res.setHeader('Content-Type', 'application/json');
-        res.send(response);
-    } catch (err) {
-        console.error("FOUT GEVANGEN:", err);
-        res.status(500).send({ error: 'Handler Error', message: err.message });
-    }
-});
-
-module.exports = app;
+// Exporteer een Vercel serverless functie die de SDK's HTTP server gebruikt.
+// Dit is de meest robuuste methode.
+module.exports = (req, res) => {
+    serveHTTP(addonInterface, { req, res });
+};
