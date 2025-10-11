@@ -31,16 +31,15 @@
     <script>
         /**
          * Deze functie bouwt de correcte Stremio installatielink en opent deze.
+         * De link wijst nu naar de root van het domein dankzij de vercel.json rewrite.
          */
         function installAddon() {
-            // FOUT: window.location.origin bevat 'https://', wat Stremio niet accepteert.
-            // const manifestUrl = window.location.origin + '/api/addon/manifest.json';
-            
-            // CORRECT: window.location.host bevat alleen de hostnaam (bv. 'jouw-app.vercel.app').
             const host = window.location.host;
-            const path = '/api/addon/manifest.json';
             
-            // Bouw de Stremio deep link in het juiste formaat.
+            // De path wijst nu direct naar manifest.json op de root.
+            const path = '/manifest.json';
+            
+            // Bouw de Stremio deep link in het juiste formaat: stremio://host/path
             const installUrl = 'stremio://' + host + path;
             
             console.log('Poging tot installatie via URL:', installUrl);
