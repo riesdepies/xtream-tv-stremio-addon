@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
+const { addonBuilder } = require('stremio-addon-sdk');
 
 const manifest = {
     id: "org.iptvexample.express.final.correct",
@@ -50,10 +50,26 @@ const addonInterface = builder.getInterface();
 const app = express();
 app.use(cors());
 
-// De SDK's ingebouwde middleware handelt alle routing (manifest, catalog, etc.)
-// Dit is eenvoudiger en minder foutgevoelig dan handmatige routes.
-app.use((req, res) => {
-    serveHTTP(addonInterface, { req, res });
+// 1. Expliciete route voor het manifest. Dit lost het installatieprobleem op.
+app.get('/manifest.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(manifest);
+});
+
+// 2. Expliciete route voor catalogus en streams. Dit lost het "Empty Catalog" probleem op.
+app.get('/:resource/:type/:id.json', async (req, res) => {
+    try {
+        const { resource, type, id } = req.params;
+        const cleanId = id.replace('.json', ''); // Verwijder de extensie
+        const args = { resource, type, id: cleanId, extra: req.query || {} };
+        const response = await addonInterface.get(args);
+        
+        res.setHeader('Content-Type', 'application/json');
+        res.send(response);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send({ error: 'An error occurred' });
+    }
 });
 
 module.exports = app;
