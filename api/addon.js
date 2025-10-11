@@ -1,11 +1,12 @@
-// Geen 'express' meer nodig. We gebruiken de ingebouwde server-logica van de SDK.
-const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
+const express = require('express');
+const cors = require('cors');
+const { addonBuilder } = require('stremio-addon-sdk');
 
 const manifest = {
-    id: "org.iptvexample.verified.solution",
-    version: "1.0.0", // Een schone, nieuwe start
-    name: "IPTV Voorbeeld (Geverifieerde Oplossing)",
-    description: "Een stabiele addon die correct draait op Vercel, gebaseerd op geverifieerde voorbeelden.",
+    id: "org.iptvexample.stable.logic",
+    version: "13.0.0", // Nieuwe, schone versie
+    name: "IPTV Voorbeeld (Stabiele Logica)",
+    description: "Een addon die stabiel draait door handmatige, expliciete routing.",
     logo: "https://www.stremio.com/website/stremio-logo-small.png",
     resources: ["catalog", "stream"],
     types: ["tv"],
@@ -46,9 +47,32 @@ builder.defineStreamHandler(args => {
 });
 
 const addonInterface = builder.getInterface();
+const app = express();
+app.use(cors());
 
-// Exporteer een Vercel serverless functie die de SDK's ingebouwde server gebruikt.
-// Dit is de meest robuuste en aanbevolen methode voor Vercel.
-module.exports = (req, res) => {
-    serveHTTP(addonInterface, { req, res });
-};
+// Oplossing 1: Een 100% betrouwbare route voor het manifest.
+app.get('/manifest.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(manifest);
+});
+
+// Oplossing 2: Een 100% betrouwbare route voor data.
+app.get('/:resource/:type/:id.json', async (req, res) => {
+    try {
+        const { resource, type, id } = req.params;
+        
+        // DE FIX: Bouw het 'args' object alléén met de schone 'req.params'.
+        // We negeren 'req.query' volledig om het conflict te vermijden.
+        const args = { resource, type, id };
+
+        const response = await addonInterface.get(args);
+        
+        res.setHeader('Content-Type', 'application/json');
+        res.send(response);
+    } catch (err) {
+        // Deze fout zou nu niet meer moeten optreden.
+        res.status(500).send({ error: 'Handler Error', message: err.message });
+    }
+});
+
+module.exports = app;
