@@ -1,10 +1,11 @@
-// GEEN express meer nodig. Dit is de sleutel.
+const express = require('express');
+const cors = require('cors');
 const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
 
 const manifest = {
-    id: "org.iptvexample.final.working.solution",
-    version: "1.0.0", // Een schone, nieuwe start
-    name: "IPTV Voorbeeld (Definitieve Oplossing)",
+    id: "org.iptvexample.verified.final",
+    version: "1.0.0",
+    name: "IPTV Voorbeeld (Geverifieerde Oplossing)",
     description: "Een stabiele addon die correct draait op Vercel.",
     logo: "https://www.stremio.com/website/stremio-logo-small.png",
     resources: ["catalog", "stream"],
@@ -46,9 +47,21 @@ builder.defineStreamHandler(args => {
 });
 
 const addonInterface = builder.getInterface();
+const app = express();
+app.use(cors());
 
-// Exporteer een pure Vercel serverless functie.
-// 'serveHTTP' zal de 'req.originalUrl' correct inspecteren en de juiste handler aanroepen.
-module.exports = (req, res) => {
+// DE CRUCIALE FIX, gebaseerd op zoekresultaten:
+// Deze middleware repareert de URL voordat de SDK het verzoek ziet.
+app.use((req, res, next) => {
+    if (req.originalUrl) {
+        req.url = req.originalUrl;
+    }
+    next();
+});
+
+// Nu geven we het gerepareerde verzoek door aan de SDK's handler.
+app.use((req, res) => {
     serveHTTP(addonInterface, { req, res });
-};
+});
+
+module.exports = app;
