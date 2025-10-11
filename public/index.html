@@ -16,7 +16,6 @@
     </style>
 </head>
 <body>
-
     <div class="container">
         <img src="https://www.stremio.com/website/stremio-logo-small.png" alt="Addon Logo" class="logo">
         <h1>IPTV Voorbeeld Addon</h1>
@@ -27,27 +26,14 @@
             Installeer Addon
         </button>
     </div>
-
     <script>
-        /**
-         * Deze functie bouwt de correcte Stremio installatielink en opent deze.
-         * De link wijst nu naar de root van het domein dankzij de vercel.json rewrite.
-         */
         function installAddon() {
             const host = window.location.host;
-            
-            // De path wijst nu direct naar manifest.json op de root.
+            // Link direct naar het statische manifest.json bestand in de public map.
             const path = '/manifest.json';
-            
-            // Bouw de Stremio deep link in het juiste formaat: stremio://host/path
             const installUrl = 'stremio://' + host + path;
-            
-            console.log('Poging tot installatie via URL:', installUrl);
-
-            // Stuur de gebruiker door naar de installatielink.
             window.location.href = installUrl;
         }
     </script>
-
 </body>
 </html>
