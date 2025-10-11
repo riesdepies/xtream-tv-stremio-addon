@@ -1,10 +1,10 @@
 const express = require('express');
 const cors = require('cors');
-const { addonBuilder } = require('stremio-addon-sdk');
+const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
 
 const manifest = {
     id: "org.iptvexample.express.final.correct",
-    version: "8.0.0", // Hoofdversie verhoogd
+    version: "8.0.0",
     name: "IPTV Voorbeeld (Express - Definitief)",
     description: "Een stabiele addon die draait op Express via Vercel.",
     logo: "https://www.stremio.com/website/stremio-logo-small.png",
@@ -46,33 +46,14 @@ builder.defineStreamHandler(args => {
     return Promise.resolve({ streams: [] });
 });
 
-
 const addonInterface = builder.getInterface();
 const app = express();
 app.use(cors());
 
-// --- DE CORRECTE MANIER: EXPRESS ROUTES ---
-// We vangen de routes die Stremio aanroept expliciet op.
-
-app.get('/:resource/:type/:id.json', async (req, res) => {
-    try {
-        const { resource, type, id } = req.params;
-        
-        // **DE FIX:** Verwijder de .json extensie van de id.
-        const cleanId = id.replace('.json', '');
-
-        const args = { resource, type, id: cleanId, extra: req.query || {} };
-
-        // Roep de addon-interface aan met de correcte 'args'.
-        const response = await addonInterface.get(args);
-        
-        res.setHeader('Content-Type', 'application/json');
-        res.send(response);
-    } catch (err) {
-        console.error(err);
-        res.status(500).send({ error: 'An error occurred' });
-    }
+// De SDK's ingebouwde middleware handelt alle routing (manifest, catalog, etc.)
+// Dit is eenvoudiger en minder foutgevoelig dan handmatige routes.
+app.use((req, res) => {
+    serveHTTP(addonInterface, { req, res });
 });
 
-// Exporteer de Express app. Vercel zal dit correct hosten.
 module.exports = app;
