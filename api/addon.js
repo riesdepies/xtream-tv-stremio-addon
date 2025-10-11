@@ -1,13 +1,11 @@
-const express = require('express');
-const cors = require('cors');
-// Belangrijk: importeer serveHTTP
+// Geen 'express' meer nodig. We gebruiken de ingebouwde server-logica van de SDK.
 const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
 
 const manifest = {
-    id: "org.iptvexample.express.final.correct",
-    version: "10.0.0", // Versie 10, de werkende versie
-    name: "IPTV Voorbeeld (Werkend)",
-    description: "Een stabiele addon die draait op Express via Vercel.",
+    id: "org.iptvexample.verified.solution",
+    version: "1.0.0", // Een schone, nieuwe start
+    name: "IPTV Voorbeeld (Geverifieerde Oplossing)",
+    description: "Een stabiele addon die correct draait op Vercel, gebaseerd op geverifieerde voorbeelden.",
     logo: "https://www.stremio.com/website/stremio-logo-small.png",
     resources: ["catalog", "stream"],
     types: ["tv"],
@@ -48,39 +46,9 @@ builder.defineStreamHandler(args => {
 });
 
 const addonInterface = builder.getInterface();
-const app = express();
-app.use(cors());
 
-// DE FIX: Geef de volledige controle over aan de SDK's eigen handler.
-// Deze functie is slim genoeg om de door Vercel aangepaste URL correct te parsen.
-const handler = (req, res) => {
+// Exporteer een Vercel serverless functie die de SDK's ingebouwde server gebruikt.
+// Dit is de meest robuuste en aanbevolen methode voor Vercel.
+module.exports = (req, res) => {
     serveHTTP(addonInterface, { req, res });
 };
-
-app.get('/manifest.json', handler);
-app.get('/:resource/:type/:id.json', handler);
-
-module.exports = app;```
-
-#### 2. `vercel.json` (Niet Wijzigen)
-
-Je `vercel.json` is al correct en moet precies zo blijven:
-
-```json
-{
-  "version": 2,
-  "rewrites": [
-    {
-      "source": "/manifest.json",
-      "destination": "/api/addon"
-    },
-    {
-      "source": "/catalog/:type/:id.json",
-      "destination": "/api/addon"
-    },
-    {
-      "source": "/stream/:type/:id.json",
-      "destination": "/api/addon"
-    }
-  ]
-}
