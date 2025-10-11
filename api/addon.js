@@ -1,14 +1,10 @@
-const express = require('express');
-const cors = require('cors');
 const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
 
-// --- ADDON DEFINITIE ---
-
 const manifest = {
-    id: "org.iptvexample.correctsdk",
-    version: "3.0.0", // Hoofdversie verhoogd
-    name: "IPTV Voorbeeld (Correcte SDK)",
-    description: "Een stabiele addon die draait op Express via Vercel.",
+    id: "org.iptvexample.final",
+    version: "4.0.0",
+    name: "IPTV Voorbeeld (Final)",
+    description: "Een simpele en werkende addon, gehost op Vercel.",
     logo: "https://www.stremio.com/website/stremio-logo-small.png",
     resources: ["catalog", "stream"],
     types: ["tv"],
@@ -62,33 +58,12 @@ builder.defineStreamHandler(args => {
     if (args.type === 'tv') {
         const channel = iptvChannels.find(c => c.id === args.id);
         if (channel) {
-            const stream = {
-                url: channel.streamUrl,
-                title: "Live"
-            };
+            const stream = { url: channel.streamUrl, title: "Live" };
             return Promise.resolve({ streams: [stream] });
         }
     }
     return Promise.resolve({ streams: [] });
 });
 
-
-// --- EXPRESS SERVER SETUP (DE CORRECTE MANIER) ---
-
-// 1. Maak de Stremio handler aan met serveHTTP
-const addonInterface = builder.getInterface();
-const handler = serveHTTP(addonInterface);
-
-// 2. Maak een Express app aan
-const app = express();
-app.use(cors());
-
-// 3. Gebruik de Stremio handler als middleware voor de Express app.
-// Express beheert de request/response cyclus, en geeft deze door aan de Stremio handler.
-// Dit is de brug die alle vorige problemen oplost.
-app.use((req, res) => {
-    handler(req, res);
-});
-
-// 4. Exporteer de Express app. Vercel zal dit correct hosten.
-module.exports = app;
+// Exporteer de handler direct. Dit is de enige correcte manier voor Vercel.
+module.exports = serveHTTP(builder.getInterface());
