@@ -73,4 +73,9 @@ builder.defineStreamHandler(args => {
 });
 
 // Exporteer de handler voor Vercel
-module.exports = serveHTTP(builder.getInterface());
+
+const handler = serveHTTP(builder.getInterface());
+
+module.exports = (req, res) => {
+    handler(req, res);
+};
