@@ -2,15 +2,7 @@
   "version": 2,
   "rewrites": [
     {
-      "source": "/manifest.json",
-      "destination": "/api/addon"
-    },
-    {
-      "source": "/catalog/:type/:id.json",
-      "destination": "/api/addon"
-    },
-    {
-      "source": "/stream/:type/:id.json",
+      "source": "/(.*)",
       "destination": "/api/addon"
     }
   ]
