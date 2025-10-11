@@ -1,6 +1,25 @@
 const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
 
-// Data voor onze IPTV-zenders
+// --- ADDON DEFINITIE ---
+// (Dit gedeelte is ongewijzigd)
+
+const manifest = {
+    id: "org.iptvexample.vercel",
+    version: "1.0.1", // Versienummer verhoogd, helpt bij debuggen
+    name: "IPTV Voorbeeld (Vercel)",
+    description: "Een simpele addon die IPTV zenders toont, gehost op Vercel.",
+    logo: "https://www.stremio.com/website/stremio-logo-small.png",
+    resources: ["catalog", "stream"],
+    types: ["tv"],
+    catalogs: [
+        {
+            type: "tv",
+            id: "iptv-zenders",
+            name: "Mijn TV Zenders"
+        }
+    ]
+};
+
 const iptvChannels = [
     {
         id: "iptv_1",
@@ -22,27 +41,8 @@ const iptvChannels = [
     }
 ];
 
-// Manifest
-const manifest = {
-    id: "org.iptvexample.vercel",
-    version: "1.0.0",
-    name: "IPTV Voorbeeld (Vercel)",
-    description: "Een simpele addon die IPTV zenders toont, gehost op Vercel.",
-    logo: "https://www.stremio.com/website/stremio-logo-small.png",
-    resources: ["catalog", "stream"],
-    types: ["tv"],
-    catalogs: [
-        {
-            type: "tv",
-            id: "iptv-zenders",
-            name: "Mijn TV Zenders"
-        }
-    ]
-};
-
 const builder = new addonBuilder(manifest);
 
-// Catalog Handler
 builder.defineCatalogHandler(args => {
     if (args.type === 'tv' && args.id === 'iptv-zenders') {
         const metas = iptvChannels.map(channel => ({
@@ -57,7 +57,6 @@ builder.defineCatalogHandler(args => {
     return Promise.resolve({ metas: [] });
 });
 
-// Stream Handler
 builder.defineStreamHandler(args => {
     if (args.type === 'tv') {
         const channel = iptvChannels.find(c => c.id === args.id);
@@ -72,6 +71,22 @@ builder.defineStreamHandler(args => {
     return Promise.resolve({ streams: [] });
 });
 
-// De serveHTTP functie retourneert een handler die direct compatibel is 
-// met de serverless omgeving van Vercel. We exporteren deze rechtstreeks.
-module.exports = serveHTTP(builder.getInterface());
+// --- SERVERLESS HANDLER ---
+// (Dit is het gecorrigeerde gedeelte)
+
+// 1. Bouw de addon interface en de handler EENMALIG buiten de export.
+// Dit is efficiënter dan het bij elke request opnieuw te doen.
+const addonInterface = builder.getInterface();
+const handler = serveHTTP(addonInterface);
+
+// 2. Exporteer een standaard Vercel serverless functie.
+// Deze functie wordt bij elke request aangeroepen.
+module.exports = (req, res) => {
+    // Log de inkomende request URL. Dit is handig voor debuggen in Vercel.
+    console.log(`Verwerking van request voor: ${req.url}`);
+
+    // 3. Roep de Stremio handler aan met de request en response objecten.
+    // De 'handler' variabele is een functie die (req, res) als argumenten verwacht.
+    // Dit is de correcte manier om het te doen, die de vorige TypeError voorkomt.
+    handler(req, res);
+};
