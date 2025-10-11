@@ -4,7 +4,7 @@ const { addonBuilder } = require('stremio-addon-sdk');
 
 const manifest = {
     id: "org.iptvexample.express.final.correct",
-    version: "8.0.0",
+    version: "8.0.0", // Hoofdversie verhoogd
     name: "IPTV Voorbeeld (Express - Definitief)",
     description: "Een stabiele addon die draait op Express via Vercel.",
     logo: "https://www.stremio.com/website/stremio-logo-small.png",
@@ -46,28 +46,24 @@ builder.defineStreamHandler(args => {
     return Promise.resolve({ streams: [] });
 });
 
+
 const addonInterface = builder.getInterface();
 const app = express();
 app.use(cors());
 
-// --- GECORRIGEERDE ROUTES ---
+// --- DE CORRECTE MANIER: EXPRESS ROUTES ---
+// We vangen de routes die Stremio aanroept expliciet op.
 
-// 1. Route om het dynamische manifest te serveren
-app.get('/manifest.json', (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    res.send(manifest);
-});
-
-// 2. Route voor catalogus en streams, met correctie voor de ID
 app.get('/:resource/:type/:id.json', async (req, res) => {
     try {
         const { resource, type, id } = req.params;
         
-        // Verwijder de .json extensie van de ID. DIT IS DE BELANGRIJKSTE FIX.
+        // **DE FIX:** Verwijder de .json extensie van de id.
         const cleanId = id.replace('.json', '');
 
-        // Roep de addon-interface aan met de gecorrigeerde 'id'.
         const args = { resource, type, id: cleanId, extra: req.query || {} };
+
+        // Roep de addon-interface aan met de correcte 'args'.
         const response = await addonInterface.get(args);
         
         res.setHeader('Content-Type', 'application/json');
@@ -78,4 +74,5 @@ app.get('/:resource/:type/:id.json', async (req, res) => {
     }
 });
 
+// Exporteer de Express app. Vercel zal dit correct hosten.
 module.exports = app;
