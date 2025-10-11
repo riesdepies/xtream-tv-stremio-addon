@@ -1,10 +1,9 @@
 const { addonBuilder } = require('stremio-addon-sdk');
 
-// We verhogen de versie, zodat we zeker weten dat de nieuwe code is gedeployed.
 const manifest = {
-    id: "org.iptvexample.serverless.final",
-    version: "5.0.0",
-    name: "IPTV Voorbeeld (Serverless)",
+    id: "org.iptvexample.serverless.fixed",
+    version: "5.1.0",
+    name: "IPTV Voorbeeld (Fixed)",
     description: "Een addon die correct is gebouwd voor de Vercel serverless omgeving.",
     logo: "https://www.stremio.com/website/stremio-logo-small.png",
     resources: ["catalog", "stream"],
@@ -66,26 +65,33 @@ builder.defineStreamHandler(args => {
     return Promise.resolve({ streams: [] });
 });
 
-// Bouw de addon-interface EENMALIG.
 const addonInterface = builder.getInterface();
 
-// --- DE CORRECTE SERVERLESS HANDLER ---
-// We exporteren een standaard Vercel-functie (req, res).
+// --- DE CORRECTE SERVERLESS HANDLER MET URL PARSING ---
 module.exports = async (req, res) => {
     try {
-        // De addon-interface kan een request verwerken en geeft een response-object terug.
-        const response = await addonInterface.get(req.query);
+        // Vercel geeft ons de volledige URL in req.url. We moeten deze parsen.
+        // Voorbeeld: /catalog/tv/iptv-zenders.json
+        const path = req.url.split('?')[0]; // Verwijder query string
+        const parts = path.split('/'); // -> ['', 'catalog', 'tv', 'iptv-zenders.json']
 
-        // Voeg de CORS-header toe, dit is belangrijk.
+        // Bouw het 'args' object dat de addon SDK verwacht.
+        const args = {
+            resource: parts[1],
+            type: parts[2],
+            id: parts[3] ? parts[3].replace('.json', '') : null,
+            extra: {} // Voor nu leeg
+        };
+
+        // Roep de addon-interface aan met de correct geparste argumenten.
+        const response = await addonInterface.get(args);
+
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Headers', '*');
         res.setHeader('Content-Type', 'application/json');
-
-        // Stuur de response terug.
         res.status(200).send(response);
     } catch (err) {
-        // Vang eventuele fouten af.
-        console.error(err);
+        console.error("Fout tijdens verwerken request:", err);
         res.status(500).send({ err: 'Internal Server Error' });
     }
 };
