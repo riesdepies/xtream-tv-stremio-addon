@@ -1,11 +1,9 @@
 {
-  "name": "stremio-iptv-addon-vercel",
-  "version": "3.0.0",
-  "description": "Een Stremio IPTV addon met Express en de correcte SDK voor Vercel.",
+  "name": "stremio-iptv-addon-final",
+  "version": "4.0.0",
+  "description": "De correcte, minimale Stremio addon voor Vercel.",
   "main": "api/addon.js",
   "dependencies": {
-    "cors": "^2.8.5",
-    "express": "^4.18.2",
     "stremio-addon-sdk": "^1.6.10"
   }
 }
