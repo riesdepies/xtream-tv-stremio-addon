@@ -59,8 +59,8 @@ app.get('/:resource/:type/:id.json', async (req, res) => {
     try {
         const { resource, type, id } = req.params;
         
-        // DE FIX: Bouw het 'args' object alléén met de parameters uit het pad.
-        // Gebruik 'req.query' hier niet, om het conflict te vermijden.
+        // **DE CRUCIALE FIX:** Bouw het 'args' object alléén met de parameters uit het pad.
+        // De 'extra' property wordt hier bewust weggelaten.
         const args = { resource, type, id };
 
         const response = await addonInterface.get(args);
@@ -68,8 +68,8 @@ app.get('/:resource/:type/:id.json', async (req, res) => {
         res.setHeader('Content-Type', 'application/json');
         res.send(response);
     } catch (err) {
-        console.error(err);
-        res.status(500).send({ error: 'An error occurred' });
+        // Stuur een meer informatieve foutmelding terug
+        res.status(500).send({ error: 'Handler Error', message: err.message });
     }
 });
 
