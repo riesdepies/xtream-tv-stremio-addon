@@ -1,8 +1,8 @@
 {
-  "name": "stremio-iptv-addon-final-working",
+  "name": "stremio-xtream-dynamic-addon",
   "version": "1.0.0",
-  "description": "Een stabiele Stremio IPTV addon voor Vercel.",
-  "main": "addon.js",
+  "description": "Een dynamische Stremio IPTV addon voor Vercel die werkt met Xtream Codes.",
+  "main": "api/index.js",
   "dependencies": {
     "stremio-addon-sdk": "^1.6.10"
   }
