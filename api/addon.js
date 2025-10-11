@@ -72,10 +72,6 @@ builder.defineStreamHandler(args => {
     return Promise.resolve({ streams: [] });
 });
 
-// Exporteer de handler voor Vercel
-
-const handler = serveHTTP(builder.getInterface());
-
-module.exports = (req, res) => {
-    handler(req, res);
-};
+// De serveHTTP functie retourneert een handler die direct compatibel is 
+// met de serverless omgeving van Vercel. We exporteren deze rechtstreeks.
+module.exports = serveHTTP(builder.getInterface());
