@@ -27,7 +27,7 @@ function fetchJson(requestUrl) {
     });
 }
 
-// Proxy-functie voor de configuratiepagina
+// Proxy-functie voor de configuratiepagina (ongewijzigd)
 async function proxyRequest(req, res, targetUrl) {
     try {
         const data = await fetchJson(targetUrl);
@@ -56,15 +56,12 @@ function buildAddon(config) {
         }]
     };
 
-    const builder = new new addonBuilder(manifest);
+    const builder = new addonBuilder(manifest);
 
     builder.defineCatalogHandler(async ({ type, id }) => {
         if (type === 'tv' && id === 'xtream-categories') {
             let allCategoryMetas = [];
             const activeServers = config.servers.filter(s => s.active);
-            
-            // Dit is een 'data URL' voor een 1x1 pixel transparante PNG.
-            const TRANSPARENT_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
             for (const [serverIndex, server] of activeServers.entries()) {
                 try {
@@ -82,12 +79,13 @@ function buildAddon(config) {
                     const categoryMetas = filteredCategories.map(category => ({
                         id: `${serverIndex}:${category.category_id}`,
                         type: 'tv',
-                        name: category.category_name,
-                        // --- AANGEPAST ---
-                        // Gebruik de transparante pixel in plaats van het logo.
-                        poster: TRANSPARENT_PIXEL,
-                        // Landscape is vaak een betere vorm voor placeholders in lijsten.
-                        posterShape: 'landscape' 
+                        name: category.category_name
+                        // --- AANPASSING HIER ---
+                        // De 'poster' en 'posterShape' zijn verwijderd.
+                        // Stremio zal nu een tekst-gebaseerde knop tonen,
+                        // wat de leesbaarheid op alle apparaten verbetert.
+                        // poster: manifest.logo,
+                        // posterShape: 'square'
                     }));
                     allCategoryMetas = allCategoryMetas.concat(categoryMetas);
                 } catch (e) {
@@ -132,9 +130,9 @@ function buildAddon(config) {
     return builder.getInterface();
 }
 
+
 // Hoofd serverless functie die als router fungeert (ongewijzigd)
 module.exports = async (req, res) => {
-    // CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
@@ -143,11 +141,8 @@ module.exports = async (req, res) => {
         res.end();
         return;
     }
-
     const url = new URL(req.url, `http://${req.headers.host}`);
     const pathParts = url.pathname.split('/').filter(p => p);
-
-    // Proxy routes
     if (pathParts[0] === 'api' && pathParts[1] === 'user_info') {
         const targetUrl = url.searchParams.get('url');
         if (!targetUrl) return res.status(400).send('Missing url parameter');
@@ -163,18 +158,14 @@ module.exports = async (req, res) => {
         playerApiUrl.searchParams.set('action', 'get_live_categories');
         return proxyRequest(req, res, playerApiUrl.toString());
     }
-
-    // Addon routes
     const configStr = pathParts[0];
     if (configStr && pathParts.length > 1) {
         try {
             const config = JSON.parse(Buffer.from(configStr, 'base64').toString('utf-8'));
             const addonInterface = buildAddon(config);
             const router = getRouter(addonInterface);
-
             req.url = req.url.replace(`/${configStr}`, '');
             if (req.url === '') req.url = '/';
-
             router(req, res, () => {
                 res.statusCode = 404;
                 res.end();
