@@ -1,11 +1,11 @@
 const express = require('express');
 const cors = require('cors');
-const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
+const { addonBuilder } = require('stremio-addon-sdk');
 
 const manifest = {
-    id: "org.iptvexample.express.final",
-    version: "7.0.0",
-    name: "IPTV Voorbeeld (Express - Werkend)",
+    id: "org.iptvexample.express.final.correct",
+    version: "8.0.0", // Hoofdversie verhoogd
+    name: "IPTV Voorbeeld (Express - Definitief)",
     description: "Een stabiele addon die draait op Express via Vercel.",
     logo: "https://www.stremio.com/website/stremio-logo-small.png",
     resources: ["catalog", "stream"],
@@ -47,23 +47,28 @@ builder.defineStreamHandler(args => {
 });
 
 
-// --- DE DEFINITIEVE EXPRESS SERVER SETUP ---
-
-// 1. Maak de Stremio handler aan met serveHTTP. Deze functie is een request listener.
 const addonInterface = builder.getInterface();
-const handler = serveHTTP(addonInterface);
-
-// 2. Maak een Express app aan.
 const app = express();
 app.use(cors());
 
-// 3. Gebruik de Stremio handler als de primaire logica voor de Express app.
-// Express beheert de request/response cyclus en geeft de controle door aan de SDK,
-// die de URL parseert en het juiste antwoord terugstuurt.
-app.use((req, res) => {
-    handler(req, res);
+// --- DE CORRECTE MANIER: EXPRESS ROUTES ---
+// We vangen de routes die Stremio aanroept expliciet op.
+
+app.get('/:resource/:type/:id.json', async (req, res) => {
+    try {
+        const { resource, type, id } = req.params;
+        const args = { resource, type, id, extra: req.query || {} };
+
+        // Roep de addon-interface aan met de correcte 'args' die Express voor ons heeft geparsed.
+        const response = await addonInterface.get(args);
+        
+        res.setHeader('Content-Type', 'application/json');
+        res.send(response);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send({ error: 'An error occurred' });
+    }
 });
 
-// 4. Exporteer de Express app. Vercel weet precies hoe dit te hosten.
-// Dit lost de 504 Gateway Timeout, de 'No handler' error, en de 'TypeError' op.
+// Exporteer de Express app. Vercel zal dit correct hosten.
 module.exports = app;
