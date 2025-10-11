@@ -1,12 +1,11 @@
-const express = require('express');
-const cors = require('cors');
-const { addonBuilder } = require('stremio-addon-sdk');
+// GEEN express meer nodig. Dit is de sleutel.
+const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
 
 const manifest = {
-    id: "org.iptvexample.stable.logic",
-    version: "13.0.0", // Nieuwe, schone versie
-    name: "IPTV Voorbeeld (Stabiele Logica)",
-    description: "Een addon die stabiel draait door handmatige, expliciete routing.",
+    id: "org.iptvexample.final.working.solution",
+    version: "1.0.0", // Een schone, nieuwe start
+    name: "IPTV Voorbeeld (Definitieve Oplossing)",
+    description: "Een stabiele addon die correct draait op Vercel.",
     logo: "https://www.stremio.com/website/stremio-logo-small.png",
     resources: ["catalog", "stream"],
     types: ["tv"],
@@ -47,32 +46,9 @@ builder.defineStreamHandler(args => {
 });
 
 const addonInterface = builder.getInterface();
-const app = express();
-app.use(cors());
 
-// Oplossing 1: Een 100% betrouwbare route voor het manifest.
-app.get('/manifest.json', (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    res.send(manifest);
-});
-
-// Oplossing 2: Een 100% betrouwbare route voor data.
-app.get('/:resource/:type/:id.json', async (req, res) => {
-    try {
-        const { resource, type, id } = req.params;
-        
-        // DE FIX: Bouw het 'args' object alléén met de schone 'req.params'.
-        // We negeren 'req.query' volledig om het conflict te vermijden.
-        const args = { resource, type, id };
-
-        const response = await addonInterface.get(args);
-        
-        res.setHeader('Content-Type', 'application/json');
-        res.send(response);
-    } catch (err) {
-        // Deze fout zou nu niet meer moeten optreden.
-        res.status(500).send({ error: 'Handler Error', message: err.message });
-    }
-});
-
-module.exports = app;
+// Exporteer een pure Vercel serverless functie.
+// 'serveHTTP' zal de 'req.originalUrl' correct inspecteren en de juiste handler aanroepen.
+module.exports = (req, res) => {
+    serveHTTP(addonInterface, { req, res });
+};
