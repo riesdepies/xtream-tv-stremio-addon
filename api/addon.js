@@ -4,8 +4,8 @@ const { addonBuilder } = require('stremio-addon-sdk');
 
 const manifest = {
     id: "org.iptvexample.express.final.correct",
-    version: "9.0.0", // Versie verhoogd om update te forceren
-    name: "IPTV Voorbeeld (Definitieve Werkende Versie)", // Naam gewijzigd
+    version: "9.1.0", // Versie verhoogd voor duidelijke update
+    name: "IPTV Voorbeeld (Logging Enabled)", // Naam gewijzigd
     description: "Een stabiele addon die draait op Express via Vercel.",
     logo: "https://www.stremio.com/website/stremio-logo-small.png",
     resources: ["catalog", "stream"],
@@ -27,15 +27,25 @@ const iptvChannels = [
 
 const builder = new addonBuilder(manifest);
 
+// --- LOGGING IN DE HANDLER ---
 builder.defineCatalogHandler(args => {
+    console.log("=> STAP 2: Binnen in de defineCatalogHandler.");
+    console.log("   - Ontvangen args:", JSON.stringify(args, null, 2));
+    console.log(`   - Vergelijking: (args.type === 'tv' && args.id === 'iptv-zenders')`);
+    console.log(`   - Waardes: ('${args.type}' === 'tv' && '${args.id}' === 'iptv-zenders')`);
+
     if (args.type === 'tv' && args.id === 'iptv-zenders') {
+        console.log("   - SUCCES: De conditie is WAAR. Bezig met genereren van metas.");
         const metas = iptvChannels.map(channel => ({ id: channel.id, type: 'tv', name: channel.name, poster: channel.logo, posterShape: 'landscape' }));
         return Promise.resolve({ metas: metas });
+    } else {
+        console.log("   - FOUT: De conditie is ONWAAR. Lege array wordt geretourneerd.");
+        return Promise.resolve({ metas: [] });
     }
-    return Promise.resolve({ metas: [] });
 });
 
 builder.defineStreamHandler(args => {
+    // Stream handler blijft hetzelfde, minder kritiek voor dit probleem
     if (args.type === 'tv') {
         const channel = iptvChannels.find(c => c.id === args.id);
         if (channel) {
@@ -50,23 +60,31 @@ const addonInterface = builder.getInterface();
 const app = express();
 app.use(cors());
 
-// Route voor het manifest: lost het installatieprobleem op.
 app.get('/manifest.json', (req, res) => {
+    console.log("--- MANIFEST ROUTE HIT ---");
     res.setHeader('Content-Type', 'application/json');
     res.send(manifest);
 });
 
-// Route voor data (catalogus/streams): lost het "Empty Catalog" probleem op.
+// --- LOGGING IN DE EXPRESS ROUTE ---
 app.get('/:resource/:type/:id.json', async (req, res) => {
+    console.log("--- DATA ROUTE HIT ---");
+    console.log("   - Ruwe URL:", req.originalUrl);
+    console.log("   - Express Params (req.params):", JSON.stringify(req.params, null, 2));
+    
     try {
         const { resource, type, id } = req.params;
-        // DE FIX: Bouw het 'args' object alléén met de parameters uit het pad.
         const args = { resource, type, id };
+        
+        console.log("=> STAP 1: 'args' object gebouwd. Wordt nu doorgegeven aan SDK:", JSON.stringify(args, null, 2));
+
         const response = await addonInterface.get(args);
+        
+        console.log("=> STAP 3: Succesvol antwoord van SDK ontvangen. Wordt naar client gestuurd.");
         res.setHeader('Content-Type', 'application/json');
         res.send(response);
     } catch (err) {
-        console.error(err);
+        console.error("!!! FATALE FOUT IN DATA ROUTE !!!", err);
         res.status(500).send({ error: 'Handler Error', message: err.message });
     }
 });
