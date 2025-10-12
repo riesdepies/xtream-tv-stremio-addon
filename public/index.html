@@ -3,79 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Xtream Addon Configuratie</title>
+<title>Mijn Xtream TV Configuratie</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
 /* --- Kleurenschema: Stremio Paars/Donker --- */
 :root {
-    --background-dark: #1e1e2a;      /* Donker paarsblauwe achtergrond */
-    --background-light: #2d2d3d;     /* Iets lichtere achtergrond voor kaarten */
-    --primary-purple: #6c4de2;       /* De primaire Stremio paarse kleur */
-    --primary-purple-hover: #583ac4; /* Iets donkerder voor hover-effecten */
-    --text-primary: #f0f0f0;         /* Primaire tekstkleur (gebroken wit) */
-    --text-secondary: #a0a0b0;       /* Secundaire, minder opvallende tekst */
-    --text-headings: #ffffff;        /* Witte tekst voor koppen */
-    --border-color: #4a4a5a;         /* Randkleur voor inputvelden */
-    --error-red: #e5484d;            /* Een heldere roodtint voor foutmeldingen */
+    --background-dark: #1e1e2a; --background-light: #2d2d3d; --primary-purple: #6c4de2;
+    --primary-purple-hover: #583ac4; --text-primary: #f0f0f0; --text-secondary: #a0a0b0;
+    --text-headings: #ffffff; --border-color: #4a4a5a; --error-red: #e5484d;
 }
-
-body { 
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
-    background-color: var(--background-dark); 
-    color: var(--text-primary); 
-    margin: 0; 
-    padding: 25px; 
-    font-size: 16px; 
-    line-height: 1.6; 
-}
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--background-dark); color: var(--text-primary); margin: 0; padding: 25px; font-size: 16px; line-height: 1.6; }
 .container { max-width: 800px; margin: 0 auto; }
 h1, h2, h3 { color: var(--text-headings); font-weight: 500; }
 h1 { font-size: 2.1em; padding-bottom: 10px; margin-bottom: 25px; }
 h2 { font-size: 1.3em; display: flex; justify-content: space-between; align-items: center; margin: 0 0 20px 0; color: #fff;}
 h3 { color: var(--text-secondary); border-bottom: 1px solid var(--background-light); padding-bottom: 5px; margin-top: 25px;}
 p { line-height: 1.6; }
-.card { 
-    background-color: var(--background-light); 
-    border-radius: 12px; 
-    padding: 25px; 
-    margin-bottom: 25px; 
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2); 
-    transition: opacity 0.3s ease; 
-    border: 1px solid var(--border-color);
-}
+.card { background-color: var(--background-light); border-radius: 12px; padding: 25px; margin-bottom: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); transition: opacity 0.3s ease; border: 1px solid var(--border-color);}
 .card.disabled { opacity: 0.5; }
 .card h2:last-child { margin-bottom: 0; }
-.button, .icon-btn { 
-    border: none; 
-    font-weight: bold; 
-    cursor: pointer; 
-    transition: all 0.2s ease-out; 
-    display: inline-flex; 
-    align-items: center; 
-    justify-content: center; 
-    gap: 10px; 
-    text-decoration: none; 
-    font-size: 1em; 
-}
-.button { 
-    background-color: var(--primary-purple); 
-    color: #fff; 
-    padding: 12px 28px;
-    border-radius: 8px;
-}
-.button:hover:not(:disabled) { 
-    background-color: var(--primary-purple-hover); 
-    box-shadow: 0 2px 8px rgba(108, 77, 226, 0.3); 
-}
+.button, .icon-btn { border: none; font-weight: bold; cursor: pointer; transition: all 0.2s ease-out; display: inline-flex; align-items: center; justify-content: center; gap: 10px; text-decoration: none; font-size: 1em; }
+.button { background-color: var(--primary-purple); color: #fff; padding: 12px 28px; border-radius: 8px;}
+.button:hover:not(:disabled) { background-color: var(--primary-purple-hover); box-shadow: 0 2px 8px rgba(108, 77, 226, 0.3); }
 .button:disabled { background-color: var(--border-color); cursor: not-allowed; opacity: 0.7; }
-.button.small { 
-    background-color: var(--border-color); 
-    color: var(--text-primary); 
-    padding: 6px 14px; 
-    font-size: 0.8em; 
-    border-radius: 6px; 
-    font-weight: 500;
-}
+.button.small { background-color: var(--border-color); color: var(--text-primary); padding: 6px 14px; font-size: 0.8em; border-radius: 6px; font-weight: 500;}
 .button.small:hover { background-color: #5a5a6a; }
 .icon-btn { background-color: transparent; color: var(--text-secondary); padding: 8px; }
 .icon-btn:hover { color: var(--primary-purple); }
@@ -84,47 +35,31 @@ p { line-height: 1.6; }
 .card-header-icons { display: flex; align-items: center; }
 .input-group { margin-bottom: 20px; }
 label { margin-bottom: 8px; display: block; font-weight: 500; color: var(--text-secondary); }
-input[type="text"], input[type="url"] { 
-    background-color: var(--background-dark); 
-    border: 1px solid var(--border-color); 
-    color: var(--text-primary); 
-    padding: 12px; 
-    border-radius: 8px; 
-    font-size: 1em; 
-    width: 100%; 
-    box-sizing: border-box; 
-}
+input[type="text"], input[type="url"] { background-color: var(--background-dark); border: 1px solid var(--border-color); color: var(--text-primary); padding: 12px; border-radius: 8px; font-size: 1em; width: 100%; box-sizing: border-box; }
 input[type="text"]:focus, input[type="url"]:focus { outline: none; border-color: var(--primary-purple); }
 .categories { margin-top: 15px; max-height: 250px; overflow-y: auto; }
 .category-item { display: block; padding: 8px 0; border-bottom: 1px solid var(--background-dark); cursor: pointer; }
 .category-item:last-child { border-bottom: none; }
 .category-item input { margin-right: 12px; accent-color: var(--primary-purple); width: 16px; height: 16px; }
 .category-controls { margin-top: 20px; display: flex; gap: 10px; }
-.error-box { 
-    color: var(--error-red); 
-    background-color: rgba(229, 72, 77, 0.1); 
-    border: 1px solid var(--error-red); 
-    padding: 15px; 
-    border-radius: 8px; 
-    margin-top: 15px; 
-}
+.error-box { color: var(--error-red); background-color: rgba(229, 72, 77, 0.1); border: 1px solid var(--error-red); padding: 15px; border-radius: 8px; margin-top: 15px; }
 .account-header { display: flex; align-items: center; gap: 10px; flex-grow: 1; }
 .account-header input { accent-color: var(--primary-purple); width: 18px; height: 18px; }
 </style>
 </head>
 <body>
 <div class="container">
-<h1 style="text-align: center;">Xtream Addon Setup</h1>
+<h1 style="text-align: center;">Mijn Xtream TV</h1>
 
 <div id="config">
     <div class="card">
-    <h2>Connect an Account</h2>
+    <h2>Koppel een Account</h2>
     <div class="input-group">
-    <label for="playlistUrl">M3U Playlist URL (met username & password)</label>
+    <label for="playlistUrl">M3U Playlist URL (incl. username & password)</label>
     <input type="url" id="playlistUrl" placeholder="http://server.com:8080/get.php?username=USER&password=PASS">
     </div>
     <div class="input-group" id="serverNameContainer" style="display: none;">
-    <label for="serverName">Server Name (aanpasbaar)</label>
+    <label for="serverName">Servernaam (aanpasbaar)</label>
     <input type="text" id="serverName">
     </div>
     <button id="addAccountBtn" class="button">Toevoegen</button>
@@ -134,8 +69,8 @@ input[type="text"]:focus, input[type="url"]:focus { outline: none; border-color:
     <div id="accountsContainer"></div>
 
     <div class="card" id="install-card" style="display: none;">
-    <h2>Installeren</h2>
-    <p>Je persoonlijke addon is klaar. Klik op de knop om deze aan Stremio toe te voegen.</p>
+    <h2>Installeren of Updaten</h2>
+    <p>Je persoonlijke addon is klaar. Klik op de knop om deze aan Stremio toe te voegen of te updaten.</p>
     <a id="install-link" class="button" href="#">Installeer in Stremio</a>
     </div>
 </div>
