@@ -27,7 +27,7 @@ function fetchJson(requestUrl) {
     });
 }
 
-// Proxy-functie voor de configuratiepagina (ongewijzigd)
+// Proxy-functie voor de configuratiepagina
 async function proxyRequest(req, res, targetUrl) {
     try {
         const data = await fetchJson(targetUrl);
@@ -58,7 +58,7 @@ function buildAddon(config) {
 
     const builder = new addonBuilder(manifest);
 
-    // --- AANGEPASTE CATALOGUS MET VERBETERDE LEESBAARHEID ---
+    // --- AANGEPASTE CATALOGUS ---
     builder.defineCatalogHandler(async ({ type, id }) => {
         if (type === 'tv' && id === 'xtream-categories') {
             let allCategoryMetas = [];
@@ -77,16 +77,13 @@ function buildAddon(config) {
                         filteredCategories = categories.filter(cat => categorySet.has(cat.category_id));
                     }
 
+                    // --- WIJZIGING HIER ---
+                    // Maak meta items aan ZONDER 'poster' en 'posterShape' eigenschappen.
+                    // Stremio toont dan alleen de tekst, wat de leesbaarheid verbetert.
                     const categoryMetas = filteredCategories.map(category => ({
                         id: `${serverIndex}:${category.category_id}`,
                         type: 'tv',
-                        name: category.category_name,
-                        // === WIJZIGING ===
-                        // Door de 'poster' eigenschap hieronder weg te laten, 
-                        // gebruikt Stremio een standaard achtergrond.
-                        // Dit verbetert de leesbaarheid van de categorienaam enorm.
-                        // poster: manifest.logo,       <-- DEZE REGEL IS VERWIJDERD
-                        // posterShape: 'square'       <-- DEZE REGEL IS VERWIJDERD
+                        name: category.category_name
                     }));
                     allCategoryMetas = allCategoryMetas.concat(categoryMetas);
                 } catch (e) {
@@ -98,7 +95,7 @@ function buildAddon(config) {
         return { metas: [] };
     });
 
-    // Stream handler blijft ongewijzigd
+    // --- STREAMS HANDLER (ongewijzigd) ---
     builder.defineStreamHandler(async ({ type, id }) => {
         if (type === 'tv') {
             const [serverIndexStr, categoryId] = id.split(':');
@@ -133,8 +130,7 @@ function buildAddon(config) {
 }
 
 // Hoofd serverless functie die als router fungeert (ongewijzigd)
-module.module.exports = async (req, res) => {
-    // CORS headers
+module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
@@ -147,7 +143,6 @@ module.module.exports = async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const pathParts = url.pathname.split('/').filter(p => p);
 
-    // Proxy routes voor de configuratiepagina
     if (pathParts[0] === 'api' && pathParts[1] === 'user_info') {
         const targetUrl = url.searchParams.get('url');
         if (!targetUrl) return res.status(400).send('Missing url parameter');
@@ -164,7 +159,6 @@ module.module.exports = async (req, res) => {
         return proxyRequest(req, res, playerApiUrl.toString());
     }
 
-    // Addon routes (manifest, catalog, stream)
     const configStr = pathParts[0];
     if (configStr && pathParts.length > 1) {
         try {
