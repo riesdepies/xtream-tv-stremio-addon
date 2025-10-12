@@ -42,7 +42,8 @@ function buildAddon(config) {
         name: "Mijn Xtream TV",
         description: "IPTV categorieën en kanalen van uw Xtream Codes provider.",
         logo: "https://www.stremio.com/website/stremio-logo-small.png",
-        resources: ["catalog", "stream"],
+        // --- WIJZIGING: 'meta' toegevoegd aan resources ---
+        resources: ["catalog", "stream", "meta"],
         types: ["tv"],
         catalogs: [{ type: "tv", id: "xtream-categories", name: "Mijn TV Categorieën" }],
         behaviorHints: {
@@ -52,6 +53,7 @@ function buildAddon(config) {
 
     const builder = new addonBuilder(manifest);
 
+    // Catalog Handler (ongewijzigd)
     builder.defineCatalogHandler(async ({ type, id }) => {
         if (type === 'tv' && id === 'xtream-categories') {
             let allCategoryMetas = [];
@@ -78,7 +80,40 @@ function buildAddon(config) {
         }
         return { metas: [] };
     });
+    
+    // --- NIEUW: Meta Handler om de foutmelding te voorkomen ---
+    builder.defineMetaHandler(async ({ type, id }) => {
+        if (type === 'tv') {
+            const [serverIndexStr, categoryId] = id.split(':');
+            const serverIndex = parseInt(serverIndexStr, 10);
+            const activeServers = config.servers.filter(s => s.active);
 
+            if (!isNaN(serverIndex) && activeServers[serverIndex]) {
+                const server = activeServers[serverIndex];
+                try {
+                    const apiUrl = `${server.url}/player_api.php?username=${server.username}&password=${server.password}&action=get_live_categories`;
+                    const allCategories = await fetchJson(apiUrl);
+                    if (!Array.isArray(allCategories)) return Promise.resolve({ meta: null });
+                    
+                    const category = allCategories.find(cat => cat.category_id == categoryId);
+                    if (category) {
+                        const metaObject = {
+                            id: id,
+                            type: 'tv',
+                            name: category.category_name,
+                            description: `Een lijst met live tv-zenders uit de categorie "${category.category_name}".`
+                        };
+                        return Promise.resolve({ meta: metaObject });
+                    }
+                } catch (e) {
+                    console.error(`Fout bij ophalen van meta-informatie voor categorie ${categoryId}:`, e);
+                }
+            }
+        }
+        return Promise.resolve({ meta: null });
+    });
+
+    // Stream Handler (ongewijzigd)
     builder.defineStreamHandler(async ({ type, id }) => {
         if (type === 'tv') {
             const [serverIndexStr, categoryId] = id.split(':');
@@ -105,17 +140,17 @@ function buildAddon(config) {
     return builder.getInterface();
 }
 
-// Hoofd serverless functie die als router fungeert
+// Hoofd serverless functie (ongewijzigd)
 module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Headers', '*');
+    res.setHeader('Access-control-allow-headers', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     if (req.method === 'OPTIONS') { res.statusCode = 204; res.end(); return; }
 
     const url = new URL(req.url, `http://${req.headers.host}`);
     const pathParts = url.pathname.split('/').filter(p => p);
 
-    if (pathParts[0] === 'api' && pathParts.length > 1) { // API proxy calls
+    if (pathParts[0] === 'api' && pathParts.length > 1) {
         if (pathParts[1] === 'user_info' || pathParts[1] === 'categories') {
             const targetUrl = url.searchParams.get('url');
             if (!targetUrl) return res.status(400).send('Missing url parameter');
@@ -131,26 +166,16 @@ module.exports = async (req, res) => {
     const configStr = pathParts[0];
     const action = pathParts[1];
 
-    if (!configStr) {
-        res.statusCode = 404;
-        res.end("Not Found: Missing configuration.");
-        return;
-    }
+    if (!configStr) { res.statusCode = 404; res.end("Not Found: Missing configuration."); return; }
 
-    // --- GECORRIGEERDE ROUTING LOGICA ---
-    // Herken expliciet de '/configure' route die Stremio aanroept.
     if (action === 'configure') {
         const filePath = path.join(__dirname, '..', 'public', 'index.html');
         fs.readFile(filePath, 'utf8', (err, data) => {
-            if (err) {
-                res.statusCode = 500;
-                res.end("Error loading configuration page.");
-                return;
-            }
+            if (err) { res.statusCode = 500; res.end("Error loading configuration page."); return; }
             res.setHeader('Content-Type', 'text/html');
             res.end(data);
         });
-    } else if (action) { // Alle andere addon calls (manifest, stream, etc.)
+    } else if (action) {
         try {
             const config = JSON.parse(Buffer.from(configStr, 'base64').toString('utf-8'));
             const addonInterface = buildAddon(config);
