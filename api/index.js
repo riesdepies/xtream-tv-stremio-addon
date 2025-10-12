@@ -2,6 +2,8 @@ const { addonBuilder, getRouter } = require('stremio-addon-sdk');
 const https = require('https');
 const http = require('http');
 const { URL } = require('url');
+const fs = require('fs');
+const path = require('path');
 
 // Helper om HTTP(S) requests te doen
 function fetchJson(requestUrl) {
@@ -12,18 +14,11 @@ function fetchJson(requestUrl) {
             res.on('data', (chunk) => { data += chunk; });
             res.on('end', () => {
                 try {
-                    if (data === '') {
-                        resolve([]); // Een lege response is geldig
-                        return;
-                    }
+                    if (data === '') { resolve([]); return; }
                     resolve(JSON.parse(data));
-                } catch (e) {
-                    reject(new Error(`Failed to parse JSON response: ${e.message}`));
-                }
+                } catch (e) { reject(new Error(`Failed to parse JSON response: ${e.message}`)); }
             });
-        }).on('error', (err) => {
-            reject(err);
-        });
+        }).on('error', (err) => { reject(err); });
     });
 }
 
@@ -39,7 +34,7 @@ async function proxyRequest(req, res, targetUrl) {
     }
 }
 
-// Functie die de addon interface bouwt op basis van de configuratie
+// Functie die de addon interface bouwt
 function buildAddon(config) {
     const manifest = {
         id: `org.xtreamcodes.from.config.${Buffer.from(JSON.stringify(config)).toString('hex').substring(0, 10)}`,
@@ -49,78 +44,60 @@ function buildAddon(config) {
         logo: "https://www.stremio.com/website/stremio-logo-small.png",
         resources: ["catalog", "stream"],
         types: ["tv"],
-        catalogs: [{
-            type: "tv",
-            id: "xtream-categories",
-            name: "Mijn TV Categorieën"
-        }]
+        catalogs: [{ type: "tv", id: "xtream-categories", name: "Mijn TV Categorieën" }],
+        // --- NIEUW: Activeert de 'Configure' knop in Stremio ---
+        behaviorHints: {
+            configurable: true
+        }
     };
 
     const builder = new addonBuilder(manifest);
 
-    // --- AANGEPASTE CATALOGUS ---
     builder.defineCatalogHandler(async ({ type, id }) => {
         if (type === 'tv' && id === 'xtream-categories') {
             let allCategoryMetas = [];
             const activeServers = config.servers.filter(s => s.active);
-
             for (const [serverIndex, server] of activeServers.entries()) {
                 try {
                     const apiUrl = `${server.url}/player_api.php?username=${server.username}&password=${server.password}&action=get_live_categories`;
                     const categories = await fetchJson(apiUrl);
-                    
                     if (!Array.isArray(categories)) continue;
-
                     let filteredCategories = categories;
                     if (Array.isArray(server.categories) && server.categories.length > 0) {
                         const categorySet = new Set(server.categories);
                         filteredCategories = categories.filter(cat => categorySet.has(cat.category_id));
                     }
-
-                    // --- WIJZIGING HIER ---
-                    // Maak meta items aan ZONDER 'poster' en 'posterShape' eigenschappen.
-                    // Stremio toont dan alleen de tekst, wat de leesbaarheid verbetert.
                     const categoryMetas = filteredCategories.map(category => ({
                         id: `${serverIndex}:${category.category_id}`,
                         type: 'tv',
                         name: category.category_name
                     }));
                     allCategoryMetas = allCategoryMetas.concat(categoryMetas);
-                } catch (e) {
-                    console.error(`Fout bij ophalen van categorieën voor server ${server.name}:`, e);
-                }
+                } catch (e) { console.error(`Fout bij ophalen van categorieën voor server ${server.name}:`, e); }
             }
             return { metas: allCategoryMetas };
         }
         return { metas: [] };
     });
 
-    // --- STREAMS HANDLER (ongewijzigd) ---
     builder.defineStreamHandler(async ({ type, id }) => {
         if (type === 'tv') {
             const [serverIndexStr, categoryId] = id.split(':');
             const serverIndex = parseInt(serverIndexStr, 10);
             const activeServers = config.servers.filter(s => s.active);
-
             if (!isNaN(serverIndex) && activeServers[serverIndex]) {
                 const server = activeServers[serverIndex];
                 try {
                     const apiUrl = `${server.url}/player_api.php?username=${server.username}&password=${server.password}&action=get_live_streams`;
                     const allChannels = await fetchJson(apiUrl);
-
                     if (!Array.isArray(allChannels)) return { streams: [] };
-
                     const channelsInCategory = allChannels.filter(channel => channel.category_id == categoryId);
-                    
                     const streams = channelsInCategory.map(channel => ({
                         url: `${server.url}/live/${server.username}/${server.password}/${channel.stream_id}.ts`,
                         title: channel.name
                     }));
-
                     return { streams: streams };
-                } catch (e) {
-                    console.error(`Fout bij ophalen van streams voor categorie ${categoryId}:`, e);
-                }
+                } catch (e) { console.error(`Fout bij ophalen van streams voor categorie ${categoryId}:`, e); }
             }
         }
         return { streams: [] };
@@ -129,16 +106,12 @@ function buildAddon(config) {
     return builder.getInterface();
 }
 
-// Hoofd serverless functie die als router fungeert (ongewijzigd)
+// Hoofd serverless functie die als router fungeert
 module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-    if (req.method === 'OPTIONS') {
-        res.statusCode = 204;
-        res.end();
-        return;
-    }
+    if (req.method === 'OPTIONS') { res.statusCode = 204; res.end(); return; }
 
     const url = new URL(req.url, `http://${req.headers.host}`);
     const pathParts = url.pathname.split('/').filter(p => p);
@@ -160,24 +133,32 @@ module.exports = async (req, res) => {
     }
 
     const configStr = pathParts[0];
-    if (configStr && pathParts.length > 1) {
+    if (configStr && pathParts.length > 1) { // Addon calls (e.g., /config/manifest.json)
         try {
             const config = JSON.parse(Buffer.from(configStr, 'base64').toString('utf-8'));
             const addonInterface = buildAddon(config);
             const router = getRouter(addonInterface);
-
             req.url = req.url.replace(`/${configStr}`, '');
             if (req.url === '') req.url = '/';
-
-            router(req, res, () => {
-                res.statusCode = 404;
-                res.end();
-            });
+            router(req, res, () => { res.statusCode = 404; res.end(); });
         } catch (e) {
             console.error("Configuratie- of routeringsfout:", e);
             res.statusCode = 400;
             res.end("Invalid configuration in URL");
         }
+    } else if (configStr) {
+        // --- NIEUW: Serveert de configuratiepagina als de URL alleen de config bevat ---
+        // Dit wordt geactiveerd door de 'Configure' knop in Stremio.
+        const filePath = path.join(__dirname, '..', 'public', 'index.html');
+        fs.readFile(filePath, 'utf8', (err, data) => {
+            if (err) {
+                res.statusCode = 500;
+                res.end("Error loading configuration page.");
+                return;
+            }
+            res.setHeader('Content-Type', 'text/html');
+            res.end(data);
+        });
     } else {
         res.statusCode = 404;
         res.end("Not Found");
