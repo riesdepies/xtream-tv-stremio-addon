@@ -1,339 +1,190 @@
 document.addEventListener('DOMContentLoaded', () => {
-const accountsContainer = document.getElementById('accountsContainer');
-let accounts = [];
-let accountCounter = 0;
+    const accountsContainer = document.getElementById('accountsContainer');
+    let accounts = [];
+    let accountCounter = 0;
+    const addAccountBtn = document.getElementById('addAccountBtn');
+    const serverNameInput = document.getElementById('serverName');
+    const serverNameContainer = document.getElementById('serverNameContainer');
+    const playlistUrlInput = document.getElementById('playlistUrl');
+    const installCard = document.getElementById('install-card');
+    const installLink = document.getElementById('install-link');
+    const errorMsgContainer = document.getElementById('errorMsgContainer');
 
-const addAccountBtn = document.getElementById('addAccountBtn');
-const serverNameInput = document.getElementById('serverName');
-const serverNameContainer = document.getElementById('serverNameContainer');
-const playlistUrlInput = document.getElementById('playlistUrl');
-const installCard = document.getElementById('install-card');
-const installLink = document.getElementById('install-link');
-const errorMsgContainer = document.getElementById('errorMsgContainer');
-
-function updateInstallLink() {
-    const finalConfig = buildConfigFromUI();
-    if (finalConfig.servers.length > 0) {
-        const configString = btoa(JSON.stringify(finalConfig));
-        // De manifest URL is nu /config/manifest.json
-        const manifestUrl = `${window.location.origin}/${configString}/manifest.json`;
-        installLink.href = `stremio://${manifestUrl.replace(/^https?:\/\//, '')}`;
-        installCard.style.display = 'block';
-    } else {
-        installCard.style.display = 'none';
-    }
-}
-
-async function loadAndPopulateConfig() {
-    let configString = '';
-    const pathSegments = window.location.pathname.split('/');
-    // Zoek naar een base64 string in het pad (voor bewerken)
-    if (pathSegments.length > 1 && pathSegments[1]) {
-        try {
-            // Test of het een geldige base64 string is
-            atob(pathSegments[1]);
-            configString = pathSegments[1];
-        } catch (e) {
-            // Geen geldige config in URL
-        }
-    }
-
-    if (!configString) {
-        const lastUrl = localStorage.getItem('stremioXtreamLastUrl');
-        if (lastUrl) {
-            playlistUrlInput.value = lastUrl;
-            playlistUrlInput.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-        return;
-    }
-
-    try {
-        const config = JSON.parse(atob(configString));
-        if (config && Array.isArray(config.servers)) {
-            accountsContainer.innerHTML = '';
-            accounts = [];
-            for (const server of config.servers) {
-                const accountId = accountCounter++;
-                const newAccount = { id: accountId, name: server.name, url: server.url, username: server.username, password: server.password, active: server.active };
-                accounts.push(newAccount);
-                
-                renderAccountCard(newAccount, server.categories);
-
-                fetch(`/api/user_info?url=${encodeURIComponent(`${server.url}/get.php?username=${server.username}&password=${server.password}`)}`)
-                    .then(res => res.ok ? res.json() : Promise.reject('Failed to fetch'))
-                    .then(userInfo => {
-                        if (userInfo.user_info) {
-                            newAccount.expDate = userInfo.user_info.exp_date;
-                        }
-                        updateExpiryInfo(newAccount);
-                    })
-                    .catch(e => {
-                        console.warn(`Could not fetch expiry date for ${server.name}`, e);
-                        newAccount.expDate = null;
-                        updateExpiryInfo(newAccount);
-                    });
-            }
-            updateInstallLink();
-        }
-    } catch (error) {
-        showError(`Failed to load configuration from URL: ${error.message}`);
-    }
-}
-
-playlistUrlInput.addEventListener('input', () => {
-    try {
-        const trimmedUrl = playlistUrlInput.value.trim();
-        if (!trimmedUrl) {
-           serverNameContainer.style.display = 'none';
-           return;
-        }
-        serverNameInput.value = new URL(trimmedUrl).hostname;
-        serverNameContainer.style.display = 'block';
-    } catch (e) {
-        serverNameContainer.style.display = 'none';
-    }
-});
-
-loadAndPopulateConfig();
-
-addAccountBtn.addEventListener('click', async () => {
-    const name = serverNameInput.value.trim();
-    const url = playlistUrlInput.value.trim();
-    showError('');
-    addAccountBtn.disabled = true;
-    addAccountBtn.textContent = 'Adding...';
-    let tempAccountId = -1;
-
-    try {
-        if (!name || !url) throw new Error("Playlist URL and Server Name are required.");
-        const parsedUrl = new URL(url);
-        const username = parsedUrl.searchParams.get('username');
-        const password = parsedUrl.searchParams.get('password');
-        if (!username || !password) throw new Error("URL must contain 'username' and 'password' parameters.");
-        const host = `${parsedUrl.protocol}//${parsedUrl.host}${parsedUrl.port ? ':' + parsedUrl.port : ''}`;
-
-        const accountId = accountCounter++;
-        tempAccountId = accountId;
-        const newAccount = { id: accountId, name, url: host, username, password, active: true };
-        accounts.push(newAccount);
-        renderAccountCard(newAccount, []);
-
-        const userInfoRes = await fetch(`/api/user_info?url=${encodeURIComponent(url)}`);
-        
-        if (!userInfoRes.ok) {
-            throw new Error("Could not connect to the server to verify account.");
-        }
-        
-        const userInfo = await userInfoRes.json();
-        if(!userInfo.user_info || userInfo.user_info.auth === 0) throw new Error("Authentication failed. Check username and password.");
-        newAccount.expDate = userInfo.user_info.exp_date;
-        
-        updateExpiryInfo(newAccount);
-
-        localStorage.setItem('stremioXtreamLastUrl', url);
-
-        playlistUrlInput.value = '';
-        serverNameInput.value = '';
-        serverNameContainer.style.display = 'none';
-        updateInstallLink();
-    } catch (err) {
-        // Verwijder de tijdelijke kaart bij een fout
-        if(tempAccountId !== -1) {
-            const cardToRemove = accountsContainer.querySelector(`[data-account-id="${tempAccountId}"]`);
-            if (cardToRemove) cardToRemove.remove();
-            accounts = accounts.filter(acc => acc.id !== tempAccountId);
-        }
-        showError(err.message);
-    } finally {
-        addAccountBtn.disabled = false;
-        addAccountBtn.textContent = 'Toevoegen';
-    }
-});
-
-function updateExpiryInfo(account) {
-    const infoContainer = document.getElementById(`expiry-info-${account.id}`);
-    if (!infoContainer) return;
-
-    let expiryInfoHtml = '';
-    if (typeof account.expDate !== 'undefined' && account.expDate !== null) {
-        if (account.expDate === 0) {
-            expiryInfoHtml = `<i class="fas fa-infinity" style="margin-right: 8px;"></i> Lifetime subscription`;
-            infoContainer.style.color = 'var(--base00)';
+    function updateInstallLink() {
+        const finalConfig = buildConfigFromUI();
+        if (finalConfig.servers.length > 0) {
+            const configString = btoa(JSON.stringify(finalConfig));
+            const manifestUrl = `${window.location.origin}/${configString}/manifest.json`;
+            installLink.href = `stremio://${manifestUrl.replace(/^https?:\/\//, '')}`;
+            installCard.style.display = 'block';
         } else {
-            const expiryDate = new Date(account.expDate * 1000);
-            const now = new Date();
-            const diffTime = expiryDate - now;
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            const isExpired = diffDays <= 0;
-
-            let daysLeftText = isExpired ? '(Verlopen)' : `(${diffDays} dagen resterend)`;
-
-            infoContainer.style.color = isExpired ? 'var(--red)' : 'var(--base00)';
-            expiryInfoHtml = `<i class="fas fa-calendar-alt" style="margin-right: 8px;"></i> Geldig tot: ${expiryDate.toLocaleDateString()} ${daysLeftText}`;
+            installCard.style.display = 'none';
         }
-    } else {
-        expiryInfoHtml = `<i class="fas fa-question-circle" style="margin-right: 8px;"></i> Vervaldatum niet beschikbaar`;
-        infoContainer.style.color = 'var(--base01)';
-    }
-    infoContainer.innerHTML = expiryInfoHtml;
-}
-
-
-function renderAccountCard(account, selectedCategories = []) {
-    const card = document.createElement('div');
-    const isActive = account.active !== false;
-    card.className = `card ${isActive ? '' : 'disabled'}`;
-    card.dataset.accountId = account.id;
-    card.dataset.selectedCategories = JSON.stringify(selectedCategories);
-
-    const playlistUrl = `${account.url}/get.php?username=${account.username}&password=${account.password}&type=m3u_plus&output=ts`;
-
-    const isLoading = typeof account.expDate === 'undefined';
-    const expiryInfo = `
-    <p id="expiry-info-${account.id}" style="margin: 15px 0 0 0; font-size: 0.9em; color: var(--base01);">
-        ${isLoading ? '<i class="fas fa-spinner fa-spin" style="margin-right: 8px;"></i> Accountdetails ophalen...' : ''}
-    </p>`;
-
-    card.innerHTML = `
-    <h2>
-        <div class="account-header">
-            <input type="checkbox" class="account-active-toggle" title="${isActive ? 'Deactiveren' : 'Activeren'}" ${isActive ? 'checked' : ''}>
-            <a href="${playlistUrl}" target="_blank" title="Open M3U Playlist URL" style="color: inherit; text-decoration: none;">${account.name}</a>
-        </div>
-        <div class="card-header-icons">
-            <button class="icon-btn filter-btn" title="Filter Categorieën"><i class="fas fa-filter"></i></button>
-            <button class="icon-btn remove-btn" title="Verwijder Account"><i class="fas fa-trash"></i></button>
-        </div>
-    </h2>
-    ${expiryInfo}
-    <div class="category-container" style="display: none;"></div>`;
-    accountsContainer.appendChild(card);
-
-    if (!isLoading) {
-        updateExpiryInfo(account);
     }
 
-    const activeToggle = card.querySelector('.account-active-toggle');
-    const filterBtn = card.querySelector('.filter-btn');
-    const removeBtn = card.querySelector('.remove-btn');
-    const categoryContainer = card.querySelector('.category-container');
-
-    activeToggle.addEventListener('change', () => {
-        card.classList.toggle('disabled', !activeToggle.checked);
-        activeToggle.title = activeToggle.checked ? 'Deactiveren' : 'Activeren';
-        updateInstallLink();
-    });
-
-    removeBtn.addEventListener('click', () => {
-        accounts = accounts.filter(a => a.id !== account.id);
-        card.remove();
-        updateInstallLink();
-    });
-
-    filterBtn.addEventListener('click', async () => {
-        filterBtn.classList.toggle('active');
-        if (categoryContainer.style.display !== 'none') {
-            categoryContainer.style.display = 'none';
+    async function loadAndPopulateConfig() {
+        let configString = '';
+        const pathSegments = window.location.pathname.split('/');
+        if (pathSegments.length > 1 && pathSegments[1]) {
+            try { atob(pathSegments[1]); configString = pathSegments[1]; } catch (e) {}
+        }
+        if (!configString) {
+            const lastUrl = localStorage.getItem('stremioXtreamLastUrl');
+            if (lastUrl) { playlistUrlInput.value = lastUrl; playlistUrlInput.dispatchEvent(new Event('input', { bubbles: true })); }
             return;
         }
-        if (categoryContainer.innerHTML !== '') {
-            categoryContainer.style.display = 'block';
-            return;
-        }
-
-        filterBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-        filterBtn.disabled = true;
-
         try {
-            const fullUrl = `${account.url}/get.php?username=${account.username}&password=${account.password}`;
-            const response = await fetch(`/api/categories?url=${encodeURIComponent(fullUrl)}`);
-            if (!response.ok) {
-                 const errorData = await response.json();
-                 throw new Error(errorData.error || 'Could not fetch categories.');
+            const config = JSON.parse(atob(configString));
+            if (config && Array.isArray(config.servers)) {
+                accountsContainer.innerHTML = ''; accounts = [];
+                for (const server of config.servers) {
+                    const accountId = accountCounter++;
+                    const newAccount = { id: accountId, name: server.name, url: server.url, username: server.username, password: server.password, active: server.active };
+                    accounts.push(newAccount);
+                    renderAccountCard(newAccount, server.categories);
+                    fetch(`/api/user_info?url=${encodeURIComponent(`${server.url}/get.php?username=${server.username}&password=${server.password}`)}`)
+                        .then(res => res.ok ? res.json() : Promise.reject('Failed to fetch'))
+                        .then(userInfo => { if (userInfo.user_info) { newAccount.expDate = userInfo.user_info.exp_date; } updateExpiryInfo(newAccount); })
+                        .catch(e => { console.warn(`Could not fetch expiry date for ${server.name}`, e); newAccount.expDate = null; updateExpiryInfo(newAccount); });
+                }
+                updateInstallLink();
             }
-            const allCategories = await response.json();
+        } catch (error) { showError(`Kon configuratie niet laden uit URL: ${error.message}`); }
+    }
 
-            card.dataset.totalCategories = allCategories.length;
+    playlistUrlInput.addEventListener('input', () => {
+        try {
+            const trimmedUrl = playlistUrlInput.value.trim();
+            if (!trimmedUrl) { serverNameContainer.style.display = 'none'; return; }
+            serverNameInput.value = new URL(trimmedUrl).hostname;
+            serverNameContainer.style.display = 'block';
+        } catch (e) { serverNameContainer.style.display = 'none'; }
+    });
 
-            const storedCategories = JSON.parse(card.dataset.selectedCategories);
-            const isInitialLoad = storedCategories.length === 0;
-            const preselected = new Set(storedCategories.map(String));
+    loadAndPopulateConfig();
 
-            categoryContainer.innerHTML = `
-            <div class="input-group">
-                <input type="text" class="category-search" placeholder="Zoek in categorieën...">
-            </div>
-            <div class="category-controls">
-                <button class="button small select-all">Selecteer Zichtbare</button>
-                <button class="button small deselect-all">Deselecteer Zichtbare</button>
-            </div>
-            <div class="categories">
-                ${allCategories.length > 0 ? allCategories.map(cat => {
-                    const isChecked = isInitialLoad || preselected.has(String(cat.category_id));
-                    return `<label class="category-item"><input type="checkbox" data-category-id="${cat.category_id}" ${isChecked ? 'checked' : ''}> ${cat.category_name}</label>`;
-                }).join('') : '<p>Geen categorieën gevonden.</p>'}
-            </div>`;
-
-            categoryContainer.style.display = 'block';
-
-            categoryContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.addEventListener('change', updateInstallLink));
-            categoryContainer.querySelector('.category-search').addEventListener('input', e => {
-                const searchTerm = e.target.value.toLowerCase();
-                categoryContainer.querySelectorAll('.category-item').forEach(label => {
-                    label.style.display = label.textContent.toLowerCase().includes(searchTerm) ? 'block' : 'none';
-                });
-            });
-            categoryContainer.querySelector('.select-all').addEventListener('click', () => {
-                categoryContainer.querySelectorAll('.category-item').forEach(label => {
-                    if (label.style.display !== 'none') label.querySelector('input').checked = true;
-                });
-                updateInstallLink();
-            });
-            categoryContainer.querySelector('.deselect-all').addEventListener('click', () => {
-                categoryContainer.querySelectorAll('.category-item').forEach(label => {
-                    if (label.style.display !== 'none') label.querySelector('input').checked = false;
-                });
-                updateInstallLink();
-            });
+    addAccountBtn.addEventListener('click', async () => {
+        const name = serverNameInput.value.trim();
+        const url = playlistUrlInput.value.trim();
+        showError('');
+        addAccountBtn.disabled = true;
+        addAccountBtn.textContent = 'Bezig met toevoegen...';
+        let tempAccountId = -1;
+        try {
+            if (!name || !url) throw new Error("Playlist URL en Servernaam zijn verplicht.");
+            const parsedUrl = new URL(url);
+            const username = parsedUrl.searchParams.get('username');
+            const password = parsedUrl.searchParams.get('password');
+            if (!username || !password) throw new Error("URL moet een 'username' en 'password' parameter bevatten.");
+            const host = `${parsedUrl.protocol}//${parsedUrl.host}${parsedUrl.port ? ':' + parsedUrl.port : ''}`;
+            const accountId = accountCounter++;
+            tempAccountId = accountId;
+            const newAccount = { id: accountId, name, url: host, username, password, active: true };
+            accounts.push(newAccount);
+            renderAccountCard(newAccount, []);
+            const userInfoRes = await fetch(`/api/user_info?url=${encodeURIComponent(url)}`);
+            if (!userInfoRes.ok) throw new Error("Kon geen verbinding maken met de server om het account te verifiëren.");
+            const userInfo = await userInfoRes.json();
+            if (!userInfo.user_info || userInfo.user_info.auth === 0) throw new Error("Authenticatie mislukt. Controleer gebruikersnaam en wachtwoord.");
+            newAccount.expDate = userInfo.user_info.exp_date;
+            updateExpiryInfo(newAccount);
+            localStorage.setItem('stremioXtreamLastUrl', url);
+            playlistUrlInput.value = ''; serverNameInput.value = ''; serverNameContainer.style.display = 'none';
             updateInstallLink();
-        } catch(err) {
+        } catch (err) {
+            if (tempAccountId !== -1) {
+                const cardToRemove = accountsContainer.querySelector(`[data-account-id="${tempAccountId}"]`);
+                if (cardToRemove) cardToRemove.remove();
+                accounts = accounts.filter(acc => acc.id !== tempAccountId);
+            }
             showError(err.message);
-            filterBtn.classList.remove('active');
         } finally {
-            filterBtn.innerHTML = '<i class="fas fa-filter"></i>';
-            filterBtn.disabled = false;
+            addAccountBtn.disabled = false; addAccountBtn.textContent = 'Toevoegen';
         }
     });
-}
 
-function buildConfigFromUI() {
-    const servers = accounts.map(account => {
-        const card = accountsContainer.querySelector(`[data-account-id="${account.id}"]`);
-        if (!card) return null;
-
-        const isActive = card.querySelector('.account-active-toggle').checked;
-        let selectedCategories;
-
-        if (card.querySelector('.category-container').innerHTML !== '') {
-            const checkedBoxes = card.querySelectorAll('.categories input[type="checkbox"]:checked');
-            selectedCategories = Array.from(checkedBoxes).map(cb => cb.dataset.categoryId);
-
-            const totalCategories = parseInt(card.dataset.totalCategories, 10);
-            // Als alles geselecteerd is, sla een lege array op (betekent "alles")
-            if (!isNaN(totalCategories) && totalCategories > 0 && selectedCategories.length === totalCategories) {
-                selectedCategories = [];
+    function updateExpiryInfo(account) {
+        const infoContainer = document.getElementById(`expiry-info-${account.id}`);
+        if (!infoContainer) return;
+        let expiryInfoHtml = '';
+        if (typeof account.expDate !== 'undefined' && account.expDate !== null) {
+            if (account.expDate === 0) {
+                expiryInfoHtml = `<i class="fas fa-infinity" style="margin-right: 8px;"></i> Levenslang abonnement`;
+                infoContainer.style.color = 'var(--text-secondary)';
+            } else {
+                const expiryDate = new Date(account.expDate * 1000);
+                const diffDays = Math.ceil((expiryDate - new Date()) / (1000 * 60 * 60 * 24));
+                const isExpired = diffDays <= 0;
+                let daysLeftText = isExpired ? '(Verlopen)' : `(${diffDays} dagen resterend)`;
+                infoContainer.style.color = isExpired ? 'var(--error-red)' : 'var(--text-secondary)';
+                expiryInfoHtml = `<i class="fas fa-calendar-alt" style="margin-right: 8px;"></i> Geldig tot: ${expiryDate.toLocaleDateString()} ${daysLeftText}`;
             }
         } else {
-            selectedCategories = JSON.parse(card.dataset.selectedCategories || '[]');
+            expiryInfoHtml = `<i class="fas fa-question-circle" style="margin-right: 8px;"></i> Vervaldatum niet beschikbaar`;
+            infoContainer.style.color = 'var(--border-color)';
         }
+        infoContainer.innerHTML = expiryInfoHtml;
+    }
 
-        const { id, expDate, ...serverData } = account;
-        return { ...serverData, active: isActive, categories: selectedCategories };
-    }).filter(Boolean);
-    return { servers };
-}
+    function renderAccountCard(account, selectedCategories = []) {
+        const card = document.createElement('div');
+        const isActive = account.active !== false;
+        card.className = `card ${isActive ? '' : 'disabled'}`;
+        card.dataset.accountId = account.id; card.dataset.selectedCategories = JSON.stringify(selectedCategories);
+        const playlistUrl = `${account.url}/get.php?username=${account.username}&password=${account.password}&type=m3u_plus&output=ts`;
+        const isLoading = typeof account.expDate === 'undefined';
+        const expiryInfo = `<p id="expiry-info-${account.id}" style="margin: 15px 0 0 0; font-size: 0.9em; color: var(--border-color);">${isLoading ? '<i class="fas fa-spinner fa-spin" style="margin-right: 8px;"></i> Accountdetails ophalen...' : ''}</p>`;
+        card.innerHTML = `<h2><div class="account-header"><input type="checkbox" class="account-active-toggle" title="${isActive ? 'Deactiveren' : 'Activeren'}" ${isActive ? 'checked' : ''}><a href="${playlistUrl}" target="_blank" title="Open M3U Playlist URL" style="color: inherit; text-decoration: none;">${account.name}</a></div><div class="card-header-icons"><button class="icon-btn filter-btn" title="Filter Categorieën"><i class="fas fa-filter"></i></button><button class="icon-btn remove-btn" title="Verwijder Account"><i class="fas fa-trash"></i></button></div></h2>${expiryInfo}<div class="category-container" style="display: none;"></div>`;
+        accountsContainer.appendChild(card);
+        if (!isLoading) { updateExpiryInfo(account); }
+        const activeToggle = card.querySelector('.account-active-toggle');
+        const filterBtn = card.querySelector('.filter-btn');
+        const removeBtn = card.querySelector('.remove-btn');
+        const categoryContainer = card.querySelector('.category-container');
+        activeToggle.addEventListener('change', () => { card.classList.toggle('disabled', !activeToggle.checked); activeToggle.title = activeToggle.checked ? 'Deactiveren' : 'Activeren'; updateInstallLink(); });
+        removeBtn.addEventListener('click', () => { accounts = accounts.filter(a => a.id !== account.id); card.remove(); updateInstallLink(); });
+        filterBtn.addEventListener('click', async () => {
+            filterBtn.classList.toggle('active');
+            if (categoryContainer.style.display !== 'none') { categoryContainer.style.display = 'none'; return; }
+            if (categoryContainer.innerHTML !== '') { categoryContainer.style.display = 'block'; return; }
+            filterBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; filterBtn.disabled = true;
+            try {
+                const fullUrl = `${account.url}/get.php?username=${account.username}&password=${account.password}`;
+                const response = await fetch(`/api/categories?url=${encodeURIComponent(fullUrl)}`);
+                if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.error || 'Kon categorieën niet ophalen.'); }
+                const allCategories = await response.json();
+                card.dataset.totalCategories = allCategories.length;
+                const storedCategories = JSON.parse(card.dataset.selectedCategories);
+                const isInitialLoad = storedCategories.length === 0;
+                const preselected = new Set(storedCategories.map(String));
+                categoryContainer.innerHTML = `<div class="input-group"><input type="text" class="category-search" placeholder="Zoek in categorieën..."></div><div class="category-controls"><button class="button small select-all">Selecteer Zichtbare</button><button class="button small deselect-all">Deselecteer Zichtbare</button></div><div class="categories">${allCategories.length > 0 ? allCategories.map(cat => { const isChecked = isInitialLoad || preselected.has(String(cat.category_id)); return `<label class="category-item"><input type="checkbox" data-category-id="${cat.category_id}" ${isChecked ? 'checked' : ''}> ${cat.category_name}</label>`; }).join('') : '<p>Geen categorieën gevonden.</p>'}</div>`;
+                categoryContainer.style.display = 'block';
+                categoryContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.addEventListener('change', updateInstallLink));
+                categoryContainer.querySelector('.category-search').addEventListener('input', e => { const searchTerm = e.target.value.toLowerCase(); categoryContainer.querySelectorAll('.category-item').forEach(label => { label.style.display = label.textContent.toLowerCase().includes(searchTerm) ? 'block' : 'none'; }); });
+                categoryContainer.querySelector('.select-all').addEventListener('click', () => { categoryContainer.querySelectorAll('.category-item').forEach(label => { if (label.style.display !== 'none') label.querySelector('input').checked = true; }); updateInstallLink(); });
+                categoryContainer.querySelector('.deselect-all').addEventListener('click', () => { categoryContainer.querySelectorAll('.category-item').forEach(label => { if (label.style.display !== 'none') label.querySelector('input').checked = false; }); updateInstallLink(); });
+                updateInstallLink();
+            } catch (err) { showError(err.message); filterBtn.classList.remove('active'); } finally { filterBtn.innerHTML = '<i class="fas fa-filter"></i>'; filterBtn.disabled = false; }
+        });
+    }
 
-function showError(message) {
-    errorMsgContainer.innerHTML = message ? `<div class="error-box">${message}</div>` : '';
-}
+    function buildConfigFromUI() {
+        const servers = accounts.map(account => {
+            const card = accountsContainer.querySelector(`[data-account-id="${account.id}"]`);
+            if (!card) return null;
+            const isActive = card.querySelector('.account-active-toggle').checked;
+            let selectedCategories;
+            if (card.querySelector('.category-container').innerHTML !== '') {
+                const checkedBoxes = card.querySelectorAll('.categories input[type="checkbox"]:checked');
+                selectedCategories = Array.from(checkedBoxes).map(cb => cb.dataset.categoryId);
+                const totalCategories = parseInt(card.dataset.totalCategories, 10);
+                if (!isNaN(totalCategories) && totalCategories > 0 && selectedCategories.length === totalCategories) { selectedCategories = []; }
+            } else { selectedCategories = JSON.parse(card.dataset.selectedCategories || '[]'); }
+            const { id, expDate, ...serverData } = account;
+            return { ...serverData, active: isActive, categories: selectedCategories };
+        }).filter(Boolean);
+        return { servers };
+    }
+
+    function showError(message) { errorMsgContainer.innerHTML = message ? `<div class="error-box">${message}</div>` : ''; }
 });
