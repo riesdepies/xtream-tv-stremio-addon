@@ -45,7 +45,6 @@ function buildAddon(config) {
         resources: ["catalog", "stream"],
         types: ["tv"],
         catalogs: [{ type: "tv", id: "xtream-categories", name: "Mijn TV Categorieën" }],
-        // --- NIEUW: Activeert de 'Configure' knop in Stremio ---
         behaviorHints: {
             configurable: true
         }
@@ -116,24 +115,42 @@ module.exports = async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const pathParts = url.pathname.split('/').filter(p => p);
 
-    if (pathParts[0] === 'api' && pathParts[1] === 'user_info') {
-        const targetUrl = url.searchParams.get('url');
-        if (!targetUrl) return res.status(400).send('Missing url parameter');
-        const playerApiUrl = new URL(targetUrl);
-        playerApiUrl.pathname = '/player_api.php';
-        return proxyRequest(req, res, playerApiUrl.toString());
-    }
-    if (pathParts[0] === 'api' && pathParts[1] === 'categories') {
-        const targetUrl = url.searchParams.get('url');
-        if (!targetUrl) return res.status(400).send('Missing url parameter');
-        const playerApiUrl = new URL(targetUrl);
-        playerApiUrl.pathname = '/player_api.php';
-        playerApiUrl.searchParams.set('action', 'get_live_categories');
-        return proxyRequest(req, res, playerApiUrl.toString());
+    if (pathParts[0] === 'api' && pathParts.length > 1) { // API proxy calls
+        if (pathParts[1] === 'user_info' || pathParts[1] === 'categories') {
+            const targetUrl = url.searchParams.get('url');
+            if (!targetUrl) return res.status(400).send('Missing url parameter');
+            const playerApiUrl = new URL(targetUrl);
+            playerApiUrl.pathname = '/player_api.php';
+            if (pathParts[1] === 'categories') {
+                playerApiUrl.searchParams.set('action', 'get_live_categories');
+            }
+            return proxyRequest(req, res, playerApiUrl.toString());
+        }
     }
 
     const configStr = pathParts[0];
-    if (configStr && pathParts.length > 1) { // Addon calls (e.g., /config/manifest.json)
+    const action = pathParts[1];
+
+    if (!configStr) {
+        res.statusCode = 404;
+        res.end("Not Found: Missing configuration.");
+        return;
+    }
+
+    // --- GECORRIGEERDE ROUTING LOGICA ---
+    // Herken expliciet de '/configure' route die Stremio aanroept.
+    if (action === 'configure') {
+        const filePath = path.join(__dirname, '..', 'public', 'index.html');
+        fs.readFile(filePath, 'utf8', (err, data) => {
+            if (err) {
+                res.statusCode = 500;
+                res.end("Error loading configuration page.");
+                return;
+            }
+            res.setHeader('Content-Type', 'text/html');
+            res.end(data);
+        });
+    } else if (action) { // Alle andere addon calls (manifest, stream, etc.)
         try {
             const config = JSON.parse(Buffer.from(configStr, 'base64').toString('utf-8'));
             const addonInterface = buildAddon(config);
@@ -146,21 +163,8 @@ module.exports = async (req, res) => {
             res.statusCode = 400;
             res.end("Invalid configuration in URL");
         }
-    } else if (configStr) {
-        // --- NIEUW: Serveert de configuratiepagina als de URL alleen de config bevat ---
-        // Dit wordt geactiveerd door de 'Configure' knop in Stremio.
-        const filePath = path.join(__dirname, '..', 'public', 'index.html');
-        fs.readFile(filePath, 'utf8', (err, data) => {
-            if (err) {
-                res.statusCode = 500;
-                res.end("Error loading configuration page.");
-                return;
-            }
-            res.setHeader('Content-Type', 'text/html');
-            res.end(data);
-        });
     } else {
         res.statusCode = 404;
-        res.end("Not Found");
+        res.end("Not Found: Invalid request path.");
     }
 };
