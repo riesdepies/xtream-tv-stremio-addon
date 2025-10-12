@@ -7,7 +7,8 @@ const path = require('path');
 
 // Helper om HTTP(S) requests te doen
 function fetchJson(requestUrl) {
-    const protocol = requestUrl.startsWith('https') ? https : http;
+    const protocol = requestUrl.startsWith('https'
+) ? https : http;
     return new Promise((resolve, reject) => {
         protocol.get(requestUrl, (res) => {
             let data = '';
@@ -16,7 +17,9 @@ function fetchJson(requestUrl) {
                 try {
                     if (data === '') { resolve([]); return; }
                     resolve(JSON.parse(data));
-                } catch (e) { reject(new Error(`Failed to parse JSON response: ${e.message}`)); }
+                } catch (e) { reject(new Error(`Failed to parse JSON response: ${
+e.message
+}`)); }
             });
         }).on('error', (err) => { reject(err); });
     });
@@ -58,7 +61,13 @@ function buildAddon(config) {
             const activeServers = config.servers.filter(s => s.active);
             for (const [serverIndex, server] of activeServers.entries()) {
                 try {
-                    const apiUrl = `${server.url}/player_api.php?username=${server.username}&password=${server.password}&action=get_live_categories`;
+                    const apiUrl = `${
+server.url
+}/player_api.php?username=${
+server.username
+}&password=${
+server.password
+}&action=get_live_categories`;
                     const categories = await fetchJson(apiUrl);
                     if (!Array.isArray(categories)) continue;
                     let filteredCategories = categories;
@@ -66,13 +75,25 @@ function buildAddon(config) {
                         const categorySet = new Set(server.categories);
                         filteredCategories = categories.filter(cat => categorySet.has(cat.category_id));
                     }
+
+                    // --- WIJZIGING HIER ---
                     const categoryMetas = filteredCategories.map(category => ({
-                        id: `${serverIndex}:${category.category_id}`,
+                        id: `${
+serverIndex
+}:${
+category.category_id
+}`,
                         type: 'tv',
-                        name: category.category_name
+                        name: category.category_name,
+                        // Deze hint vertelt Stremio dat dit item geen standaard volgbare serie is.
+                        behaviorHints: {
+                            hasScheduledVideos: true
+                        }
                     }));
                     allCategoryMetas = allCategoryMetas.concat(categoryMetas);
-                } catch (e) { console.error(`Fout bij ophalen van categorieën voor server ${server.name}:`, e); }
+                } catch (e) { console.error(`Fout bij ophalen van categorieën voor server ${
+server.name
+}:`, e); }
             }
             return { metas: allCategoryMetas };
         }
@@ -87,23 +108,37 @@ function buildAddon(config) {
             if (!isNaN(serverIndex) && activeServers[serverIndex]) {
                 const server = activeServers[serverIndex];
                 try {
-                    const apiUrl = `${server.url}/player_api.php?username=${server.username}&password=${server.password}&action=get_live_streams`;
+                    const apiUrl = `${
+server.url
+}/player_api.php?username=${
+server.username
+}&password=${
+server.password
+}&action=get_live_streams`;
                     const allChannels = await fetchJson(apiUrl);
                     if (!Array.isArray(allChannels)) return { streams: [] };
                     const channelsInCategory = allChannels.filter(channel => channel.category_id == categoryId);
                     
-                    // --- WIJZIGING HIER ---
                     const streams = channelsInCategory.map(channel => ({
-                        url: `${server.url}/live/${server.username}/${server.password}/${channel.stream_id}.ts`,
+                        url: `${
+server.url
+}/live/${
+server.username
+}/${
+server.password
+}/${
+channel.stream_id
+}.ts`,
                         title: channel.name,
-                        // Deze hint vertelt Stremio dat dit een live stream is en dat de voortgang niet moet worden bijgehouden.
                         behaviorHints: {
                             live: true
                         }
                     }));
 
                     return { streams: streams };
-                } catch (e) { console.error(`Fout bij ophalen van streams voor categorie ${categoryId}:`, e); }
+                } catch (e) { console.error(`Fout bij ophalen van streams voor categorie ${
+categoryId
+}:`, e); }
             }
         }
         return { streams: [] };
@@ -119,7 +154,9 @@ module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     if (req.method === 'OPTIONS') { res.statusCode = 204; res.end(); return; }
 
-    const url = new URL(req.url, `http://${req.headers.host}`);
+    const url = new URL(req.url, `http://${
+req.headers.host
+}`);
     const pathParts = url.pathname.split('/').filter(p => p);
 
     if (pathParts[0] === 'api' && pathParts.length > 1) {
@@ -160,7 +197,9 @@ module.exports = async (req, res) => {
             const config = JSON.parse(Buffer.from(configStr, 'base64').toString('utf-8'));
             const addonInterface = buildAddon(config);
             const router = getRouter(addonInterface);
-            req.url = req.url.replace(`/${configStr}`, '');
+            req.url = req.url.replace(`/${
+configStr
+}`, '');
             if (req.url === '') req.url = '/';
             router(req, res, () => { res.statusCode = 404; res.end(); });
         } catch (e) {
