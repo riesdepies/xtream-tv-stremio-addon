@@ -13,7 +13,7 @@ function fetchJson(requestUrl) {
             res.on('end', () => {
                 try {
                     if (data === '') {
-                        resolve([]); // Een lege response is geldig, bv. geen categorieën
+                        resolve([]); // Een lege response is geldig
                         return;
                     }
                     resolve(JSON.parse(data));
@@ -44,7 +44,7 @@ function buildAddon(config) {
     const manifest = {
         id: `org.xtreamcodes.from.config.${Buffer.from(JSON.stringify(config)).toString('hex').substring(0, 10)}`,
         version: "1.0.0",
-        name: "Mijn Xtream TV", // Naam blijft hetzelfde zoals gevraagd
+        name: "Mijn Xtream TV",
         description: "IPTV categorieën en kanalen van uw Xtream Codes provider.",
         logo: "https://www.stremio.com/website/stremio-logo-small.png",
         resources: ["catalog", "stream"],
@@ -52,13 +52,13 @@ function buildAddon(config) {
         catalogs: [{
             type: "tv",
             id: "xtream-categories",
-            name: "Mijn TV Categorieën" // Duidelijkere naam voor de catalogus
+            name: "Mijn TV Categorieën"
         }]
     };
 
     const builder = new addonBuilder(manifest);
 
-    // --- AANGEPASTE LOGICA: CATALOGUS MET CATEGORIEËN ---
+    // --- AANGEPASTE CATALOGUS MET VERBETERDE LEESBAARHEID ---
     builder.defineCatalogHandler(async ({ type, id }) => {
         if (type === 'tv' && id === 'xtream-categories') {
             let allCategoryMetas = [];
@@ -66,28 +66,27 @@ function buildAddon(config) {
 
             for (const [serverIndex, server] of activeServers.entries()) {
                 try {
-                    // 1. Haal de categorieën op van de server
                     const apiUrl = `${server.url}/player_api.php?username=${server.username}&password=${server.password}&action=get_live_categories`;
                     const categories = await fetchJson(apiUrl);
                     
                     if (!Array.isArray(categories)) continue;
 
                     let filteredCategories = categories;
-                    // Filter de categorieën als de gebruiker dit heeft ingesteld op de config pagina
                     if (Array.isArray(server.categories) && server.categories.length > 0) {
                         const categorySet = new Set(server.categories);
                         filteredCategories = categories.filter(cat => categorySet.has(cat.category_id));
                     }
 
-                    // 2. Maak voor elke categorie een "meta item" aan voor in de Stremio catalogus
                     const categoryMetas = filteredCategories.map(category => ({
-                        // De ID combineert de server index en de categorie ID
                         id: `${serverIndex}:${category.category_id}`,
                         type: 'tv',
                         name: category.category_name,
-                        // Gebruik een generieke poster, aangezien categorieën geen eigen afbeelding hebben
-                        poster: manifest.logo,
-                        posterShape: 'square'
+                        // === WIJZIGING ===
+                        // Door de 'poster' eigenschap hieronder weg te laten, 
+                        // gebruikt Stremio een standaard achtergrond.
+                        // Dit verbetert de leesbaarheid van de categorienaam enorm.
+                        // poster: manifest.logo,       <-- DEZE REGEL IS VERWIJDERD
+                        // posterShape: 'square'       <-- DEZE REGEL IS VERWIJDERD
                     }));
                     allCategoryMetas = allCategoryMetas.concat(categoryMetas);
                 } catch (e) {
@@ -99,10 +98,9 @@ function buildAddon(config) {
         return { metas: [] };
     });
 
-    // --- AANGEPASTE LOGICA: STREAMS PER CATEGORIE ---
+    // Stream handler blijft ongewijzigd
     builder.defineStreamHandler(async ({ type, id }) => {
         if (type === 'tv') {
-            // 1. Haal de server index en categorie ID uit de meta item ID
             const [serverIndexStr, categoryId] = id.split(':');
             const serverIndex = parseInt(serverIndexStr, 10);
             const activeServers = config.servers.filter(s => s.active);
@@ -110,19 +108,15 @@ function buildAddon(config) {
             if (!isNaN(serverIndex) && activeServers[serverIndex]) {
                 const server = activeServers[serverIndex];
                 try {
-                    // 2. Haal ALLE live streams op van de betreffende server
                     const apiUrl = `${server.url}/player_api.php?username=${server.username}&password=${server.password}&action=get_live_streams`;
                     const allChannels = await fetchJson(apiUrl);
 
                     if (!Array.isArray(allChannels)) return { streams: [] };
 
-                    // 3. Filter de kanalen die bij de geselecteerde categorie horen
                     const channelsInCategory = allChannels.filter(channel => channel.category_id == categoryId);
                     
-                    // 4. Maak voor elk kanaal in de categorie een stream object aan
                     const streams = channelsInCategory.map(channel => ({
                         url: `${server.url}/live/${server.username}/${server.password}/${channel.stream_id}.ts`,
-                        // De titel van de stream is de naam van het kanaal, zodat je in Stremio kunt kiezen
                         title: channel.name
                     }));
 
@@ -139,7 +133,7 @@ function buildAddon(config) {
 }
 
 // Hoofd serverless functie die als router fungeert (ongewijzigd)
-module.exports = async (req, res) => {
+module.module.exports = async (req, res) => {
     // CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', '*');
