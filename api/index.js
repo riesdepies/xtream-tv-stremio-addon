@@ -91,10 +91,17 @@ function buildAddon(config) {
                     const allChannels = await fetchJson(apiUrl);
                     if (!Array.isArray(allChannels)) return { streams: [] };
                     const channelsInCategory = allChannels.filter(channel => channel.category_id == categoryId);
+                    
+                    // --- WIJZIGING HIER ---
                     const streams = channelsInCategory.map(channel => ({
                         url: `${server.url}/live/${server.username}/${server.password}/${channel.stream_id}.ts`,
-                        title: channel.name
+                        title: channel.name,
+                        // Deze hint vertelt Stremio dat dit een live stream is en dat de voortgang niet moet worden bijgehouden.
+                        behaviorHints: {
+                            live: true
+                        }
                     }));
+
                     return { streams: streams };
                 } catch (e) { console.error(`Fout bij ophalen van streams voor categorie ${categoryId}:`, e); }
             }
@@ -115,7 +122,7 @@ module.exports = async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const pathParts = url.pathname.split('/').filter(p => p);
 
-    if (pathParts[0] === 'api' && pathParts.length > 1) { // API proxy calls
+    if (pathParts[0] === 'api' && pathParts.length > 1) {
         if (pathParts[1] === 'user_info' || pathParts[1] === 'categories') {
             const targetUrl = url.searchParams.get('url');
             if (!targetUrl) return res.status(400).send('Missing url parameter');
@@ -137,8 +144,6 @@ module.exports = async (req, res) => {
         return;
     }
 
-    // --- GECORRIGEERDE ROUTING LOGICA ---
-    // Herken expliciet de '/configure' route die Stremio aanroept.
     if (action === 'configure') {
         const filePath = path.join(__dirname, '..', 'public', 'index.html');
         fs.readFile(filePath, 'utf8', (err, data) => {
@@ -150,7 +155,7 @@ module.exports = async (req, res) => {
             res.setHeader('Content-Type', 'text/html');
             res.end(data);
         });
-    } else if (action) { // Alle andere addon calls (manifest, stream, etc.)
+    } else if (action) {
         try {
             const config = JSON.parse(Buffer.from(configStr, 'base64').toString('utf-8'));
             const addonInterface = buildAddon(config);
