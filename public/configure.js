@@ -42,7 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const newAccount = { id: accountId, name: server.name, url: server.url, username: server.username, password: server.password, active: server.active };
                     accounts.push(newAccount);
                     renderAccountCard(newAccount, server.categories);
-                    fetch(`/api/user_info?url=${encodeURIComponent(`${server.url}/get.php?username=${server.username}&password=${server.password}`)}`)
+                    fetch(`/api/user_info?url=${encodeURIComponent(`${server.url}/player_api.php?username=${server.username}&password=${server.password}`)}`)
                         .then(res => res.ok ? res.json() : Promise.reject('Kon accountdetails niet ophalen van de server.'))
                         .then(userInfo => { if (userInfo.user_info) { newAccount.expDate = userInfo.user_info.exp_date; } updateExpiryInfo(newAccount); })
                         .catch(e => { console.warn(`Kon vervaldatum niet ophalen voor ${server.name}`, e); newAccount.expDate = null; updateExpiryInfo(newAccount); });
@@ -56,7 +56,8 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const trimmedUrl = playlistUrlInput.value.trim();
             if (!trimmedUrl) { serverNameContainer.style.display = 'none'; return; }
-            serverNameInput.value = new URL(trimmedUrl).hostname;
+            const parsed = new URL(trimmedUrl);
+            serverNameInput.value = parsed.hostname;
             serverNameContainer.style.display = 'block';
         } catch (e) { serverNameContainer.style.display = 'none'; }
     });
@@ -76,13 +77,23 @@ document.addEventListener('DOMContentLoaded', () => {
             const username = parsedUrl.searchParams.get('username');
             const password = parsedUrl.searchParams.get('password');
             if (!username || !password) throw new Error("URL moet een 'username' en 'password' parameter bevatten.");
-            const host = `${parsedUrl.protocol}//${parsedUrl.host}${parsedUrl.port ? ':' + parsedUrl.port : ''}`;
+            
+            // --- WIJZIGING HIERONDER: Robuustere manier om de basis-URL te krijgen ---
+            const origin = parsedUrl.origin;
+            if (!origin || origin === 'null') {
+                throw new Error("Kon geen geldige basis-URL (bv. http://server.com:8080) uit de opgegeven URL halen.");
+            }
+            // --- EINDE WIJZIGING ---
+
             const accountId = accountCounter++;
             tempAccountId = accountId;
-            const newAccount = { id: accountId, name, url: host, username, password, active: true };
+            const newAccount = { id: accountId, name, url: origin, username, password, active: true };
             accounts.push(newAccount);
             renderAccountCard(newAccount, []);
-            const userInfoRes = await fetch(`/api/user_info?url=${encodeURIComponent(url)}`);
+            
+            const verifyUrl = `${origin}/player_api.php?username=${username}&password=${password}`;
+            const userInfoRes = await fetch(`/api/user_info?url=${encodeURIComponent(verifyUrl)}`);
+
             if (!userInfoRes.ok) throw new Error("Kon geen verbinding maken met de server om het account te verifiëren.");
             const userInfo = await userInfoRes.json();
             if (!userInfo.user_info || userInfo.user_info.auth === 0) throw new Error("Authenticatie mislukt. Controleer gebruikersnaam en wachtwoord.");
@@ -157,16 +168,21 @@ document.addEventListener('DOMContentLoaded', () => {
             filterBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
             filterBtn.disabled = true;
             try {
-                const fullUrl = `${account.url}/get.php?username=${account.username}&password=${account.password}`;
+                // --- WIJZIGING HIERONDER: Gebruikt direct de player_api.php voor betrouwbaarheid ---
+                const fullUrl = `${account.url}/player_api.php?username=${account.username}&password=${account.password}`;
                 const response = await fetch(`/api/categories?url=${encodeURIComponent(fullUrl)}`);
+                // --- EINDE WIJZIGING ---
                 
-                // --- WIJZIGING HIERONDER: Verbeterde error check ---
                 if (!response.ok) {
                     const errorText = await response.text();
-                    throw new Error(`Serverfout bij ophalen categorieën (status: ${response.status}). Reactie: ${errorText.substring(0, 200)}`);
+                    try {
+                        const errorJson = JSON.parse(errorText);
+                        throw new Error(`Serverfout bij ophalen categorieën (status: ${response.status}). Details: ${errorJson.details || errorJson.error}`);
+                    } catch(e) {
+                         throw new Error(`Serverfout bij ophalen categorieën (status: ${response.status}). Reactie: ${errorText.substring(0, 200)}`);
+                    }
                 }
                 const allCategories = await response.json();
-                // --- EINDE WIJZIGING ---
 
                 card.dataset.totalCategories = allCategories.length;
                 const storedCategories = JSON.parse(card.dataset.selectedCategories);
@@ -180,13 +196,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 categoryContainer.querySelector('.deselect-all').addEventListener('click', () => { categoryContainer.querySelectorAll('.category-item').forEach(label => { if (label.style.display !== 'none') label.querySelector('input').checked = false; }); updateInstallLink(); });
                 updateInstallLink();
             } catch (err) {
-                 // --- WIJZIGING HIERONDER: Verbeterde error weergave ---
                 let errorMessage = err.message;
-                if (err instanceof SyntaxError) { // Catches JSON parsing errors
+                if (err instanceof SyntaxError) {
                     errorMessage = "Kon het antwoord van de server niet verwerken. De server gaf ongeldige data terug (geen JSON).";
                 }
                 showError(errorMessage);
-                // --- EINDE WIJZIGING ---
                 filterBtn.classList.remove('active');
             } finally {
                 filterBtn.innerHTML = '<i class="fas fa-filter"></i>';
