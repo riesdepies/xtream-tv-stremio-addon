@@ -44,7 +44,7 @@ async function proxyRequest(req, res, targetUrl) {
     }
 }
 
-// Functie die de addon interface bouwt
+// Functie die de addon interface bouwt (ongewijzigd)
 function buildAddon(config) {
     const manifest = {
         id: `org.xtreamcodes.from.config.${Buffer.from(JSON.stringify(config)).toString('hex').substring(0, 10)}`,
@@ -156,29 +156,36 @@ module.exports = async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const pathParts = url.pathname.split('/').filter(p => p);
 
-    // API proxy-logica blijft ongewijzigd
-    if (pathParts[0] === 'api' && pathParts.length > 1) {
-        const targetUrl = url.searchParams.get('url');
-        if (!targetUrl) {
-            res.statusCode = 400;
-            res.end(JSON.stringify({ error: 'Missing url parameter' }));
-            return;
+    // --- WIJZIGING HIERONDER: try...catch toegevoegd ---
+    try {
+        if (pathParts[0] === 'api' && pathParts.length > 1) {
+            const targetUrl = url.searchParams.get('url');
+            if (!targetUrl) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: 'Missing url parameter' }));
+                return;
+            }
+            const playerApiUrl = new URL(targetUrl);
+            playerApiUrl.pathname = '/player_api.php';
+            if (pathParts[1] === 'categories') {
+                playerApiUrl.searchParams.set('action', 'get_live_categories');
+            } else if (pathParts[1] === 'user_info') {
+                playerApiUrl.searchParams.set('action', 'get_user_info');
+            }
+            return proxyRequest(req, res, playerApiUrl.toString());
         }
-        const playerApiUrl = new URL(targetUrl);
-        playerApiUrl.pathname = '/player_api.php';
-        if (pathParts[1] === 'categories') {
-            playerApiUrl.searchParams.set('action', 'get_live_categories');
-        } else if (pathParts[1] === 'user_info') {
-            playerApiUrl.searchParams.set('action', 'get_user_info');
-        }
-        return proxyRequest(req, res, playerApiUrl.toString());
+    } catch (e) {
+        console.error("API Proxy Error:", e);
+        res.statusCode = 500;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: "Interne serverfout in de API proxy.", details: e.message }));
+        return;
     }
+    // --- EINDE WIJZIGING ---
 
     const configStr = pathParts[0];
     const action = pathParts[1];
 
-    // --- WIJZIGING HIERONDER ---
-    // Serveer de configuratiepagina voor de root URL en voor de /configure URL.
     if (!configStr || action === 'configure') {
         const filePath = path.join(__dirname, '..', 'public', 'index.html');
         fs.readFile(filePath, 'utf8', (err, data) => {
@@ -193,7 +200,6 @@ module.exports = async (req, res) => {
         return;
     }
     
-    // Handel addon requests af (manifest, catalog, etc.)
     if (configStr && action) {
         try {
             const config = JSON.parse(Buffer.from(configStr, 'base64').toString('utf-8'));
@@ -214,9 +220,7 @@ module.exports = async (req, res) => {
         }
         return;
     }
-    // --- EINDE WIJZIGING ---
 
-    // Fallback voor ongeldige paden
     res.statusCode = 404;
     res.end("Not Found: Invalid request path.");
 };
