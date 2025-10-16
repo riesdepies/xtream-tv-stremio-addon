@@ -7,7 +7,6 @@ const path = require('path');
 
 // Helper om HTTP(S) requests te doen
 function fetchJson(requestUrl) {
-    // Stel een User-Agent in, sommige servers vereisen dit.
     const options = {
         headers: {
             'User-Agent': 'Mozilla/5.0'
@@ -20,9 +19,7 @@ function fetchJson(requestUrl) {
             res.on('data', (chunk) => { data += chunk; });
             res.on('end', () => {
                 try {
-                    // Xtream Codes retourneert een lege body voor sommige foute requests, ipv een error.
                     if (data === '') { 
-                        // We sturen een object terug dat de frontend als een mislukking kan interpreteren.
                         resolve({ user_info: { auth: 0 } }); 
                         return;
                     }
@@ -159,6 +156,7 @@ module.exports = async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const pathParts = url.pathname.split('/').filter(p => p);
 
+    // API proxy-logica blijft ongewijzigd
     if (pathParts[0] === 'api' && pathParts.length > 1) {
         const targetUrl = url.searchParams.get('url');
         if (!targetUrl) {
@@ -166,60 +164,59 @@ module.exports = async (req, res) => {
             res.end(JSON.stringify({ error: 'Missing url parameter' }));
             return;
         }
-
         const playerApiUrl = new URL(targetUrl);
         playerApiUrl.pathname = '/player_api.php';
-
-        // --- WIJZIGING HIERONDER ---
-        // Voeg de correcte 'action' parameter toe gebaseerd op de API call.
         if (pathParts[1] === 'categories') {
             playerApiUrl.searchParams.set('action', 'get_live_categories');
         } else if (pathParts[1] === 'user_info') {
             playerApiUrl.searchParams.set('action', 'get_user_info');
         }
-        // --- EINDE WIJZIGING ---
-        
         return proxyRequest(req, res, playerApiUrl.toString());
     }
-    
-    // --- ONDERSTAANDE CODE IS VEREENVOUDIGD VOOR DUIDELIJKHEID ---
-    // (Geen functionele wijziging, enkel structuur)
 
     const configStr = pathParts[0];
-    if (!configStr) {
-        // Serveer de configuratiepagina als er geen config in de URL staat.
+    const action = pathParts[1];
+
+    // --- WIJZIGING HIERONDER ---
+    // Serveer de configuratiepagina voor de root URL en voor de /configure URL.
+    if (!configStr || action === 'configure') {
         const filePath = path.join(__dirname, '..', 'public', 'index.html');
         fs.readFile(filePath, 'utf8', (err, data) => {
-            if (err) { res.statusCode = 500; res.end("Error loading configuration page."); return; }
+            if (err) {
+                res.statusCode = 500;
+                res.end("Error loading configuration page.");
+                return;
+            }
             res.setHeader('Content-Type', 'text/html');
             res.end(data);
         });
         return;
     }
+    
+    // Handel addon requests af (manifest, catalog, etc.)
+    if (configStr && action) {
+        try {
+            const config = JSON.parse(Buffer.from(configStr, 'base64').toString('utf-8'));
+            const addonInterface = buildAddon(config);
+            const router = getRouter(addonInterface);
+            
+            req.url = req.url.replace(`/${configStr}`, '');
+            if (req.url === '') req.url = '/';
 
-    const action = pathParts[1];
-    if (!action) {
-        res.statusCode = 404;
-        res.end("Not Found: Missing action (e.g., /manifest.json)");
+            router(req, res, () => {
+                res.statusCode = 404;
+                res.end();
+            });
+        } catch (e) {
+            console.error("Configuratie- of routeringsfout:", e);
+            res.statusCode = 400;
+            res.end("Invalid configuration in URL");
+        }
         return;
     }
+    // --- EINDE WIJZIGING ---
 
-    try {
-        const config = JSON.parse(Buffer.from(configStr, 'base64').toString('utf-8'));
-        const addonInterface = buildAddon(config);
-        const router = getRouter(addonInterface);
-        
-        // Pas de request URL aan zodat de router het begrijpt.
-        req.url = req.url.replace(`/${configStr}`, ''); 
-        if (req.url === '') req.url = '/';
-
-        router(req, res, () => {
-            res.statusCode = 404;
-            res.end();
-        });
-    } catch (e) {
-        console.error("Configuratie- of routeringsfout:", e);
-        res.statusCode = 400;
-        res.end("Invalid configuration in URL");
-    }
+    // Fallback voor ongeldige paden
+    res.statusCode = 404;
+    res.end("Not Found: Invalid request path.");
 };
