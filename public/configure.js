@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadAndPopulateConfig() {
         let configString = '';
         const pathSegments = window.location.pathname.split('/');
-        if (pathSegments.length > 1 && pathSegments[1]) {
+        if (pathSegments.length > 1 && pathSegments[1] && pathSegments[1] !== 'configure') {
             try { atob(pathSegments[1]); configString = pathSegments[1]; } catch (e) {}
         }
         if (!configString) {
@@ -43,9 +43,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     accounts.push(newAccount);
                     renderAccountCard(newAccount, server.categories);
                     fetch(`/api/user_info?url=${encodeURIComponent(`${server.url}/get.php?username=${server.username}&password=${server.password}`)}`)
-                        .then(res => res.ok ? res.json() : Promise.reject('Failed to fetch'))
+                        .then(res => res.ok ? res.json() : Promise.reject('Kon accountdetails niet ophalen van de server.'))
                         .then(userInfo => { if (userInfo.user_info) { newAccount.expDate = userInfo.user_info.exp_date; } updateExpiryInfo(newAccount); })
-                        .catch(e => { console.warn(`Could not fetch expiry date for ${server.name}`, e); newAccount.expDate = null; updateExpiryInfo(newAccount); });
+                        .catch(e => { console.warn(`Kon vervaldatum niet ophalen voor ${server.name}`, e); newAccount.expDate = null; updateExpiryInfo(newAccount); });
                 }
                 updateInstallLink();
             }
@@ -143,16 +143,31 @@ document.addEventListener('DOMContentLoaded', () => {
         const categoryContainer = card.querySelector('.category-container');
         activeToggle.addEventListener('change', () => { card.classList.toggle('disabled', !activeToggle.checked); activeToggle.title = activeToggle.checked ? 'Deactiveren' : 'Activeren'; updateInstallLink(); });
         removeBtn.addEventListener('click', () => { accounts = accounts.filter(a => a.id !== account.id); card.remove(); updateInstallLink(); });
+        
         filterBtn.addEventListener('click', async () => {
             filterBtn.classList.toggle('active');
-            if (categoryContainer.style.display !== 'none') { categoryContainer.style.display = 'none'; return; }
-            if (categoryContainer.innerHTML !== '') { categoryContainer.style.display = 'block'; return; }
-            filterBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; filterBtn.disabled = true;
+            if (categoryContainer.style.display !== 'none') {
+                categoryContainer.style.display = 'none';
+                return;
+            }
+            if (categoryContainer.innerHTML !== '') {
+                categoryContainer.style.display = 'block';
+                return;
+            }
+            filterBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            filterBtn.disabled = true;
             try {
                 const fullUrl = `${account.url}/get.php?username=${account.username}&password=${account.password}`;
                 const response = await fetch(`/api/categories?url=${encodeURIComponent(fullUrl)}`);
-                if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.error || 'Kon categorieën niet ophalen.'); }
+                
+                // --- WIJZIGING HIERONDER: Verbeterde error check ---
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Serverfout bij ophalen categorieën (status: ${response.status}). Reactie: ${errorText.substring(0, 200)}`);
+                }
                 const allCategories = await response.json();
+                // --- EINDE WIJZIGING ---
+
                 card.dataset.totalCategories = allCategories.length;
                 const storedCategories = JSON.parse(card.dataset.selectedCategories);
                 const isInitialLoad = storedCategories.length === 0;
@@ -164,7 +179,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 categoryContainer.querySelector('.select-all').addEventListener('click', () => { categoryContainer.querySelectorAll('.category-item').forEach(label => { if (label.style.display !== 'none') label.querySelector('input').checked = true; }); updateInstallLink(); });
                 categoryContainer.querySelector('.deselect-all').addEventListener('click', () => { categoryContainer.querySelectorAll('.category-item').forEach(label => { if (label.style.display !== 'none') label.querySelector('input').checked = false; }); updateInstallLink(); });
                 updateInstallLink();
-            } catch (err) { showError(err.message); filterBtn.classList.remove('active'); } finally { filterBtn.innerHTML = '<i class="fas fa-filter"></i>'; filterBtn.disabled = false; }
+            } catch (err) {
+                 // --- WIJZIGING HIERONDER: Verbeterde error weergave ---
+                let errorMessage = err.message;
+                if (err instanceof SyntaxError) { // Catches JSON parsing errors
+                    errorMessage = "Kon het antwoord van de server niet verwerken. De server gaf ongeldige data terug (geen JSON).";
+                }
+                showError(errorMessage);
+                // --- EINDE WIJZIGING ---
+                filterBtn.classList.remove('active');
+            } finally {
+                filterBtn.innerHTML = '<i class="fas fa-filter"></i>';
+                filterBtn.disabled = false;
+            }
         });
     }
 
